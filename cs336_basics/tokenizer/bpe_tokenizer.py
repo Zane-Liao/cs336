@@ -1,7 +1,7 @@
 
 from tokenizer import Tokenizer, merge
 
-@dataclass(frozen=True)
+# @dataclass(frozen=True)
 class BPETokenizerParams:
     """All you need to specify a BPETokenizer."""
     vocab: dict[int, bytes]     # index -> bytes
@@ -22,3 +22,17 @@ class BPETokenizer(Tokenizer):
         bytes_list = list(map(self.params.vocab.get, indices))  # @inspect bytes_list
         string = b"".join(bytes_list).decode("utf-8")  # @inspect string
         return string
+
+
+def bpe_tokenizer():
+    raise NotImplementedError
+
+def bpe_train(
+    input_path: str, 
+    vocab_size: int, 
+    speical_token: list[str],
+    vocab: dict[int, bytes],
+    merges: list[tuple[bytes, bytes]]
+) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    """"""
+    raise NotImplementedError

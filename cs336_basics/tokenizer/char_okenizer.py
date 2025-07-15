@@ -7,3 +7,10 @@ class CharacterTokenizer(Tokenizer):
         return list(map(ord, string))
     def decode(self, indices: list[int]) -> str:
         return "".join(map(chr, indices))
+    
+    
+def character_tokenizer():
+    raise NotImplementedError
+
+def word_tokenizer():
+    raise NotImplementedError

@@ -12,3 +12,8 @@ class ByteTokenizer(Tokenizer):
         string_bytes = bytes(indices)  # @inspect string_bytes
         string = string_bytes.decode("utf-8")  # @inspect string
         return string
+    
+    
+def byte_tokenizer():
+    raise NotImplementedError
+
