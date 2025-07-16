@@ -8,45 +8,14 @@ import random
 import tiktoken
 import unicodedata
 import doctest
+import multiprocessing
 from typing import Iterable
 # import sentencepiece
 
-class Tokenizer:
-    """Abstract interface for a tokenizer."""
-    def __init__(self):
-        raise NotADirectoryError
-    
-    # def train(self, text, vocab_size, verbose=False):
-    #     # Tokenizer can train a vocabulary of size vocab_size from text
-    #     raise NotImplementedError
-    
-    def encode(self, string: str) -> list[int]:
-        raise NotImplementedError
-    
-    def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
-        raise NotImplementedError
-    
-    def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
-        raise NotImplementedError
-    
-    def decode(self, indices: list[int]) -> str:
-        raise NotImplementedError
-    
-    def _build_vocab(self):
-        # vocab is simply and deterministically derived from merges
-        vocab = {idx: bytes([idx]) for idx in range(256)}
-        for (p0, p1), idx in self.merges.items():
-            vocab[idx] = vocab[p0] + vocab[p1]
-        for special, idx in self.special_tokens.items():
-            vocab[idx] = special.encode("utf-8")
-        return vocab
-    
-    def save(self, file_prefix):
-        raise NotImplementedError
-    
-    def load(self, model_file):
-        raise NotImplementedError
+PAT_GPT2 = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+PAT_GPT4 = r""""""
 
+# @karpathy
 def get_stats(ids, counts=None):
     """
     Given a list of integers, return a dictionary of counts of consecutive pairs
@@ -60,7 +29,7 @@ def get_stats(ids, counts=None):
         counts[pair] = counts.get(pair, 0) + 1
     return counts
 
-    
+# @karpathy
 def merge(
     indices: list[int],
     pair: tuple[int, int],
@@ -82,6 +51,27 @@ def merge(
             i += 1
     return new_indices
 
+# @karpathy
+# first two helper functions...
+def replace_control_characters(s: str) -> str:
+    # we don't want to print control characters
+    # which distort the output (e.g. \n or much worse)
+    # https://stackoverflow.com/questions/4324790/removing-control-characters-from-a-string-in-python/19016117#19016117
+    # http://www.unicode.org/reports/tr44/#GC_Values_Table
+    chars = []
+    for ch in s:
+        if unicodedata.category(ch)[0] != "C":
+            chars.append(ch) # this character is ok
+        else:
+            chars.append(f"\\u{ord(ch):04x}") # escape
+    return "".join(chars)
+
+# @karpathy
+def render_token(t: bytes) -> str:
+    # pretty print a token, escaping control characters
+    s = t.decode('utf-8', errors='replace')
+    s = replace_control_characters(s)
+    return s
 
 def get_compression_ratio(string: str, indices: list[int]) -> float:
     """Given `string` that has been tokenized into `indices`, ."""
@@ -90,13 +80,106 @@ def get_compression_ratio(string: str, indices: list[int]) -> float:
     return num_bytes / num_tokens
 
 
-# def get_gpt2_tokenizer():
-#     # Code: https://github.com/openai/tiktoken
-#     # You can use cl100k_base for the gpt3.5-turbo or gpt4 tokenizer
-#     return tiktoken.get_encoding("gpt2")
 
-# def intro_to_tokenization():
-#     raise NotImplementedError
+class Tokenizer:
+    """Abstract interface for a tokenizer."""
+    def __init__(self):
+        raise NotADirectoryError
+    
+    def encode(self, string: str) -> list[int]:
+        raise NotImplementedError
+    
+    def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
+        raise NotImplementedError
+    
+    def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
+        raise NotImplementedError
+    
+    def decode(self, indices: list[int]) -> str:
+        raise NotImplementedError
+    
+    # @karpathy
+    def _build_vocab(self):
+        # vocab is simply and deterministically derived from merges
+        vocab = {idx: bytes([idx]) for idx in range(256)}
+        for (p0, p1), idx in self.merges.items():
+            vocab[idx] = vocab[p0] + vocab[p1]
+        for special, idx in self.special_tokens.items():
+            vocab[idx] = special.encode("utf-8")
+        return vocab
+    
+    def save(self, file_prefix):
+        raise NotImplementedError
+    
+    def load(self, model_file):
+        raise NotImplementedError
 
-# def tokenization_examples():
-#     raise NotImplementedError
+
+
+class ByteTokenizer(Tokenizer):
+    """Represent a string as a sequence of bytes."""
+    def encode(self, string: str) -> list[int]:
+        string_bytes = string.encode("utf-8")  # @inspect string_bytes
+        indices = list(map(int, string_bytes))  # @inspect indices
+        return indices
+
+    def decode(self, indices: list[int]) -> str:
+        string_bytes = bytes(indices)  # @inspect string_bytes
+        string = string_bytes.decode("utf-8")  # @inspect string
+        return string
+    
+def byte_tokenizer():
+    raise NotImplementedError
+
+
+
+class CharacterTokenizer(Tokenizer):
+    """Represent a string as a sequence of Unicode code points."""
+    def encode(self, string: str) -> list[int]:
+        return list(map(ord, string))
+
+    def decode(self, indices: list[int]) -> str:
+        return "".join(map(chr, indices))
+    
+    
+def character_tokenizer():
+    raise NotImplementedError
+
+def word_tokenizer():
+    raise NotImplementedError
+
+
+
+# @dataclass(frozen=True)
+class BPETokenizerParams:
+    """All you need to specify a BPETokenizer."""
+    vocab: dict[int, bytes]     # index -> bytes
+    merges: dict[tuple[int, int], int]  # index1,index2 -> new_index
+
+class BPETokenizer(Tokenizer):
+    """BPE tokenizer given a set of merges and a vocabulary."""
+    def __init__(self, params: BPETokenizerParams):
+        self.params = params
+
+    def encode(self, string: str) -> list[int]:
+        indices = list(map(int, string.encode("utf-8")))  # @inspect indices
+        # Note: this is a very slow implementation
+        for pair, new_index in self.params.merges.items():  # @inspect pair, @inspect new_index
+            indices = merge(indices, pair, new_index)
+        return indices
+
+    def decode(self, indices: list[int]) -> str:
+        bytes_list = list(map(self.params.vocab.get, indices))  # @inspect bytes_list
+        string = b"".join(bytes_list).decode("utf-8")  # @inspect string
+        return string
+
+def bpe_tokenizer():
+    raise NotImplementedError
+
+def train_bpe(
+    input_path: str, 
+    vocab_size: int, 
+    speical_token: list[str],
+) -> BPETokenizerParams:
+    """"""
+    raise NotImplementedError
