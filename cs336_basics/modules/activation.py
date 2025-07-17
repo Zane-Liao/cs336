@@ -6,7 +6,6 @@ from torch.optim import Optimizer
 
 
 __all__ = [
-    "GeLU",
     "GeGLU",
     "SwiGLU",
     "Softmax",
@@ -14,12 +13,6 @@ __all__ = [
 ]
 
 
-class GeLU(Module):
-    """"""
-    def __init__():
-        raise NotImplementedError
-
- 
 class GeGLU(Module):
     """"""
     def __init__():

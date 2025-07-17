@@ -3,17 +3,19 @@
 # Original author: @karpathy
 # Modifications: I modified some documents, the code is basically unchanged.
 
-import regex
+import regex as re
 import random
-import tiktoken
 import unicodedata
 import doctest
 import multiprocessing
+import json
 from typing import Iterable
-# import sentencepiece
 
 PAT_GPT2 = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-PAT_GPT4 = r""""""
+PAT_SPECIAL_TOKEN = {
+    '<|endoftext|>': 50256
+}
+
 
 # @karpathy
 def get_stats(ids, counts=None):
@@ -51,52 +53,97 @@ def merge(
             i += 1
     return new_indices
 
-# @karpathy
-# first two helper functions...
-def replace_control_characters(s: str) -> str:
-    # we don't want to print control characters
-    # which distort the output (e.g. \n or much worse)
-    # https://stackoverflow.com/questions/4324790/removing-control-characters-from-a-string-in-python/19016117#19016117
-    # http://www.unicode.org/reports/tr44/#GC_Values_Table
-    chars = []
-    for ch in s:
-        if unicodedata.category(ch)[0] != "C":
-            chars.append(ch) # this character is ok
-        else:
-            chars.append(f"\\u{ord(ch):04x}") # escape
-    return "".join(chars)
-
-# @karpathy
-def render_token(t: bytes) -> str:
-    # pretty print a token, escaping control characters
-    s = t.decode('utf-8', errors='replace')
-    s = replace_control_characters(s)
-    return s
-
-def get_compression_ratio(string: str, indices: list[int]) -> float:
-    """Given `string` that has been tokenized into `indices`, ."""
-    num_bytes = len(bytes(string, encoding="utf-8"))  # @inspect num_bytes
-    num_tokens = len(indices)                       # @inspect num_tokens
-    return num_bytes / num_tokens
-
-
 
 class Tokenizer:
-    """Abstract interface for a tokenizer."""
-    def __init__(self):
-        raise NotADirectoryError
+    def __init__(self, vocab, merges, special_tokens=PAT_SPECIAL_TOKEN):
+        """
+        Construct a tokenizer from a given vocabulary, list of merges,
+        and (optionally) a list of special tokens.
+
+        Parameters:
+            vocab: dict[int, bytes]
+            merges: list[tuple[bytes, bytes]]
+            pecial_tokens: list[str] | None = None
+        """
+        self.merges = merges
+        self.special_tokens = special_tokens or {}
+        self.vocab = self._build_vocab()
     
     def encode(self, string: str) -> list[int]:
-        raise NotImplementedError
-    
+        """
+        Encode an input text into a sequence of token IDs.
+        
+        Parameters:
+            string: str
+        Return:
+            list[int]
+        """
+        if self.special_tokens is None:
+            self.register_special_tokens({"<|endoftext|>": 50256})
+
+        return self.encode_ordinary(string)
+        
+    @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
-        raise NotImplementedError
+        """
+        Class method that constructs and return a Tokenizer from a
+        serialized vocabulary and list of merges (in the same format
+        that your BPE training code output) and (optionally) a list of special
+        tokens.
+        
+        Parameters:
+            cls: Class Tokenizer
+            vocab_filepath: str
+            merges_filepath: str
+            special_tokens: list[str] | None = None
+        """
+        with open (vocab_filepath, 'r', encoding='utf-8') as f:
+            vocab = json.load(f)
+        with open (merges_filepath, 'r', encoding='utf-8') as f:
+            merges = [line.strip().split() for line in f if not line.startswith("#")]
+            
+        return cls(vocab, merges, special_tokens=special_tokens)
     
     def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
-        raise NotImplementedError
+        """
+        Given an iterable of strings (e.g., a Python file handle),
+        return a generator that lazily yields token IDs. This is
+        required for memory-eﬀicient tokenization of large files that
+        we cannot directly load into memory.
+        
+        Parameter:
+            iterable: Iterable[str]
+        Return:
+            Iterable[int]
+        """
+        for string in iterable:
+            string = string.strip("\n")
+            token = self.encode(string)
+            for token_id in token:
+                yield token_id
     
     def decode(self, indices: list[int]) -> str:
-        raise NotImplementedError
+        """
+        Decode a sequence of token IDs into text.
+        
+        Parameter:
+            indices: list[int]
+        Return:
+            str
+        """
+        # @karpathy
+        # given ids (list of integers), return Python string
+        part_bytes = []
+        for idx in indices:
+            if idx in self.vocab:
+                part_bytes.append(self.vocab[idx])
+            elif idx in self.inverse_special_tokens:
+                part_bytes.append(self.inverse_special_tokens[idx].encode("utf-8"))
+            else:
+                raise ValueError(f"invalid token id: {idx}")
+        text_bytes = b"".join(part_bytes)
+        string = text_bytes.decode("utf-8", errors="replace")
+        return string
     
     # @karpathy
     def _build_vocab(self):
@@ -108,78 +155,67 @@ class Tokenizer:
             vocab[idx] = special.encode("utf-8")
         return vocab
     
-    def save(self, file_prefix):
-        raise NotImplementedError
+    # @karpathy
+    def register_special_tokens(self, special_tokens):
+        # special_tokens is a dictionary of str -> int
+        # example: {"<|endoftext|>": 50256}
+        self.special_tokens = special_tokens
+        self.inverse_special_tokens = {v: k for k, v in special_tokens.items()}
+
+    # @karpathy
+    def _encode_chunk(self, text_bytes):
+        # return the token ids
+        # let's begin. first, convert all bytes to integers in range 0..255
+        ids = list(text_bytes)
+        while len(ids) >= 2:
+            # find the pair with the lowest merge index
+            stats = get_stats(ids)
+            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
+            # subtle: if there are no more merges available, the key will
+            # result in an inf for every single pair, and the min will be
+            # just the first pair in the list, arbitrarily
+            # we can detect this terminating case by a membership check
+            if pair not in self.merges:
+                break # nothing else can be merged anymore
+            # otherwise let's merge the best pair (lowest merge index)
+            idx = self.merges[pair]
+            ids = merge(ids, pair, idx)
+        return ids
     
-    def load(self, model_file):
-        raise NotImplementedError
-
-
-
-class ByteTokenizer(Tokenizer):
-    """Represent a string as a sequence of bytes."""
-    def encode(self, string: str) -> list[int]:
-        string_bytes = string.encode("utf-8")  # @inspect string_bytes
-        indices = list(map(int, string_bytes))  # @inspect indices
-        return indices
-
-    def decode(self, indices: list[int]) -> str:
-        string_bytes = bytes(indices)  # @inspect string_bytes
-        string = string_bytes.decode("utf-8")  # @inspect string
-        return string
-    
-def byte_tokenizer():
-    raise NotImplementedError
-
-
-
-class CharacterTokenizer(Tokenizer):
-    """Represent a string as a sequence of Unicode code points."""
-    def encode(self, string: str) -> list[int]:
-        return list(map(ord, string))
-
-    def decode(self, indices: list[int]) -> str:
-        return "".join(map(chr, indices))
-    
-    
-def character_tokenizer():
-    raise NotImplementedError
-
-def word_tokenizer():
-    raise NotImplementedError
-
-
-
-# @dataclass(frozen=True)
-class BPETokenizerParams:
-    """All you need to specify a BPETokenizer."""
-    vocab: dict[int, bytes]     # index -> bytes
-    merges: dict[tuple[int, int], int]  # index1,index2 -> new_index
-
-class BPETokenizer(Tokenizer):
-    """BPE tokenizer given a set of merges and a vocabulary."""
-    def __init__(self, params: BPETokenizerParams):
-        self.params = params
-
-    def encode(self, string: str) -> list[int]:
-        indices = list(map(int, string.encode("utf-8")))  # @inspect indices
-        # Note: this is a very slow implementation
-        for pair, new_index in self.params.merges.items():  # @inspect pair, @inspect new_index
-            indices = merge(indices, pair, new_index)
-        return indices
-
-    def decode(self, indices: list[int]) -> str:
-        bytes_list = list(map(self.params.vocab.get, indices))  # @inspect bytes_list
-        string = b"".join(bytes_list).decode("utf-8")  # @inspect string
-        return string
-
-def bpe_tokenizer():
-    raise NotImplementedError
+    # @karpathy
+    def encode_ordinary(self, text):
+        """Encoding that ignores any special tokens."""
+        # split text into chunks of text by categories defined in regex pattern
+        text_chunks = re.finditer(PAT_GPT2, text)
+        # all chunks of text are encoded separately, then results are joined
+        ids = []
+        for chunk in text_chunks:
+            chunk_bytes = chunk.encode("utf-8") # raw bytes
+            chunk_ids = self._encode_chunk(chunk_bytes)
+            ids.extend(chunk_ids)
+        return ids
 
 def train_bpe(
     input_path: str, 
     vocab_size: int, 
     speical_token: list[str],
-) -> BPETokenizerParams:
-    """"""
+) -> tuple[dict[int, bytes], dict[tuple[int, int], int]]:
+    """
+    input_path: str Path to a text file with BPE tokenizer training data.
+    
+    vocab_size: int A positive integer that defines the maximum final vocabulary
+    size (including the initial byte vocabulary, vocabulary items produced 
+    from merging, and any special tokens).
+    
+    special_tokens: list[str] A list of strings to add to the vocabulary.
+    These special tokens do not otherwise affect BPE training.
+    
+    vocab: dict[int, bytes] The tokenizer vocabulary, a mapping from int
+    (token ID in the vocabu-lary) to bytes (token bytes).
+    
+    merges: list[tuple[bytes, bytes]] A list of BPE merges produced from training.
+    Each list item is a tuple of bytes (<token1>, <token2>),
+    representing that <token1> was merged with <token2>.
+    The merges should be ordered by order of creation.
+    """
     raise NotImplementedError

@@ -26,3 +26,6 @@ class CrossEntropyLoss(WeightedLoss):
     """"""
     def __init__():
         raise NotImplementedError
+    
+    def step(self):
+        raise NotImplementedError

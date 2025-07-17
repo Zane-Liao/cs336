@@ -5,7 +5,6 @@ from torch import Tensor
 from torch.nn import Module, ModuleList, Sequential, Parameter
 from torch.optim import Optimizer
 from .activation import (
-    GeLU,
     GeGLU,
     SwiGLU,
     Softmax,
