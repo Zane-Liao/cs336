@@ -5,21 +5,26 @@ from torch import Tensor
 from torch.nn import Module, ModuleList, Sequential, Parameter
 from torch.optim import Optimizer
 from .activation import (
-    GeGLU,
-    SwiGLU,
-    Softmax,
-    LogSoftmax
+    SiLU,
+    Softmax
 )
+
 from .layers import (
-    TokenEmbedding,
+    Embedding,
     Linear,
     RMSNorm,
-    Dropout,
-    MultiheadAttention,
-    RoPE
+    GLU,
+    SwiGLU,
+    RotaryPositionalEmbedding,
+    ScaledDotProductAttention,
+    MultiHeadSelfAttention,
+    TransformerBlock,
+    TransformerLM
 )
+
 from .loss import CrossEntropyLoss
-from .optimizer import AdamW
+from .optimizer import SGD, AdamW
+from .transformer import DenseTransformerDecoder
 
 
 class DenseTransformerDecoder(Module):

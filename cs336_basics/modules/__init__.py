@@ -8,21 +8,23 @@ import importlib.metadata
 __version__ = importlib.metadata.version("cs336_basics")
 
 from .activation import (
-    GeGLU,
-    SwiGLU,
-    Softmax,
-    LogSoftmax
+    SiLU,
+    Softmax
 )
 
 from .layers import (
-    TokenEmbedding,
+    Embedding,
     Linear,
     RMSNorm,
-    Dropout,
-    MultiheadAttention,
-    RoPE
+    GLU,
+    SwiGLU,
+    RotaryPositionalEmbedding,
+    ScaledDotProductAttention,
+    MultiHeadSelfAttention,
+    TransformerBlock,
+    TransformerLM
 )
 
 from .loss import CrossEntropyLoss
-from .optimizer import AdamW
+from .optimizer import SGD, AdamW
 from .transformer import DenseTransformerDecoder

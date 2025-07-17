@@ -218,4 +218,4 @@ def train_bpe(
     representing that <token1> was merged with <token2>.
     The merges should be ordered by order of creation.
     """
-    raise NotImplementedError
+    

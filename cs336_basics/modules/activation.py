@@ -3,35 +3,21 @@ import torch
 from torch import Tensor
 from torch.nn import Module, ModuleList, Parameter
 from torch.optim import Optimizer
-
+from torch import sigmoid
 
 __all__ = [
-    "GeGLU",
-    "SwiGLU",
-    "Softmax",
-    "LogSoftmax"
+    "SiLU",
+    "Softmax"
 ]
 
 
-class GeGLU(Module):
-    """"""
+class SiLU(Module):
     def __init__():
-        raise NotImplementedError
-    
-
-class SwiGLU(Module):
-    """"""
-    def __init__():
+        """"""
         raise NotImplementedError
 
    
 class Softmax(Module):
-    """"""
     def __init__():
-        raise NotImplementedError
-    
-  
-class LogSoftmax(Module):
-    """"""
-    def __init__():
+        """"""
         raise NotImplementedError
