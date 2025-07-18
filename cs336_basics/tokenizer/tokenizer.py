@@ -2,14 +2,17 @@
 # https://github.com/karpathy/minbpe/blob/master/minbpe/base.py
 # Original author: @karpathy
 # Modifications: I modified some documents, the code is basically unchanged.
-
+import os
 import regex as re
 import random
 import unicodedata
 import doctest
 import multiprocessing
 import json
+from typing import BinaryIO
 from typing import Iterable
+from dataclasses import dataclass
+from collections import defaultdict
 
 PAT_GPT2 = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 PAT_SPECIAL_TOKEN = {
@@ -22,7 +25,7 @@ def get_stats(ids, counts=None):
     """
     Given a list of integers, return a dictionary of counts of consecutive pairs
     Example: 
-        >>> get_stats(a = [1, 2, 3, 1, 2])
+        >>> get_stats([1, 2, 3, 1, 2])
         {(1, 2): 2, (2, 3): 1, (3, 1): 1}
     Optionally allows to update an existing dictionary of counts
     """
@@ -55,7 +58,7 @@ def merge(
 
 
 class Tokenizer:
-    def __init__(self, vocab, merges, special_tokens=PAT_SPECIAL_TOKEN):
+    def __init__(self, vocab, merges, special_tokens=None):
         """
         Construct a tokenizer from a given vocabulary, list of merges,
         and (optionally) a list of special tokens.
@@ -194,12 +197,70 @@ class Tokenizer:
             chunk_ids = self._encode_chunk(chunk_bytes)
             ids.extend(chunk_ids)
         return ids
+    
+    
+def find_chunk_boundaries(
+    file: BinaryIO, 
+    desired_num_chunks: int, 
+    split_special_token: bytes
+) -> list[int]:
+    """
+    Chunk the file into parts that can be counted independently.
+    May return fewer chunks if the boundaries end up overlapping.
+    """
+    assert isinstance(split_special_token, bytes), (
+        "Must represent special token as a bytestring"
+    )
+
+    # Get total file size in bytes
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+
+    chunk_size = file_size // desired_num_chunks
+
+    # Initial guesses for chunk boundary locations, uniformly spaced
+    # Chunks start on previous index, don't include last index
+    chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
+    chunk_boundaries[-1] = file_size
+
+    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
+
+    for bi in range(1, len(chunk_boundaries) - 1):
+        initial_position = chunk_boundaries[bi]
+        file.seek(initial_position)  # Start at boundary guess
+        while True:
+            mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk
+
+            # If EOF, this boundary should be at the end of the file
+            if mini_chunk == b"":
+                chunk_boundaries[bi] = file_size
+                break
+
+            # Find the special token in the mini chunk
+            found_at = mini_chunk.find(split_special_token)
+            if found_at != -1:
+                chunk_boundaries[bi] = initial_position + found_at
+                break
+            initial_position += mini_chunk_size
+
+    # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
+    return sorted(set(chunk_boundaries))
+
+
+
+@dataclass(frozen=True)
+class BPETokenizerParams:
+    """All you need to specify a BPETokenizer."""
+    vocab: dict[int, bytes]     # index -> bytes
+    merges: dict[tuple[int, int], int]  # index1,index2 -> new_index
+
 
 def train_bpe(
     input_path: str, 
     vocab_size: int, 
     speical_token: list[str],
-) -> tuple[dict[int, bytes], dict[tuple[int, int], int]]:
+) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     input_path: str Path to a text file with BPE tokenizer training data.
     
@@ -218,4 +279,34 @@ def train_bpe(
     representing that <token1> was merged with <token2>.
     The merges should be ordered by order of creation.
     """
+    with open (input_path, 'r', encoding='utf-8') as f:
+        string = f.read()
+
+    indices = list(map(int, string.encode('utf-8')))  # @inspect indices
+    merges: dict[tuple[int, int], int] = {}  # index1, index2 => merged index
+    vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}  # index -> bytes
     
+    speical_tokens = speical_token or {}
+    max_merges = vocab_size - 256 - len(speical_tokens)
+    
+    for i in range(max_merges):
+        counts = defaultdict(int)
+        for index1, index2 in zip(indices, indices[1:]):  # For each adjacent pair
+            counts[(index1, index2)] += 1  # @inspect counts
+        pair = max(counts, key=counts.get)  # @inspect pair
+
+        index1, index2 = pair
+        new_index = 256 + i  # @inspect new_index
+        merges[pair] = new_index  # @inspect merges
+        vocab[new_index] = vocab[index1] + vocab[index2]  # @inspect vocab
+        indices = merge(indices, pair, new_index)  # @inspect indices
+        
+        if i % 100 == 0:
+            print(f"Merge {i}: {pair} -> {new_index} (frequency: {counts[pair]})")
+    
+    for j, token in enumerate(speical_tokens):
+        token_id  = 256 + len(merges) + j
+        vocab[token_id] = token.encode('utf-8')
+    
+
+    return BPETokenizerParams(vocab=vocab, merges=merges)
