@@ -9,7 +9,11 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 from cs336_basics.tokenizer import *
-
+from cs336_basics.modules.loss import *
+from cs336_basics.modules.layers import *
+from cs336_basics.modules.optimizer import *
+from cs336_basics.modules.activation import *
+from cs336_basics.modules.transformer import *
 
 
 def run_linear(
@@ -30,8 +34,16 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    m = Linear(d_in, d_out)
+    # In Pytorch, torch.no_grad() This is to turn off 
+    # tracking gradients and not record them in the computational graph,
+    # We are modifying parameters instead of doing training.
+    with torch.no_grad():
+        m.weight.copy_(weights.T)
+    # in_fectures ==> x: torch.Tensor
+    # m.forward(in_features) with no call __call__()
+    # m.__call__(in_features) => Module.__call__() call forward()
+    return m(in_features)
 
 
 def run_embedding(
@@ -52,8 +64,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    em = Embedding(vocab_size, d_model)
+    with torch.no_grad():
+        em.weight.copy_(weights)
+    return em(token_ids)
 
 
 def run_swiglu(
@@ -380,7 +394,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    rms_norm = RMSNorm(d_model, eps)
+    with torch.no_grad():
+        rms_norm.weight.copy_(weights)
+    return rms_norm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -559,7 +576,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    
+    return Tokenizer(vocab, merges, special_tokens)
 
 
 def run_train_bpe(

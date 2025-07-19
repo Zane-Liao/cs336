@@ -2,15 +2,12 @@
 # https://github.com/karpathy/minbpe/blob/master/minbpe/base.py
 # Original author: @karpathy
 # Modifications: I modified some documents, the code is basically unchanged.
-import os
-import time
-import regex as re
-import multiprocessing
-import json
-from typing import BinaryIO
-from typing import Iterable
-from dataclasses import dataclass
-from collections import Counter, defaultdict
+
+from utils.core_imports import (
+    os, re, time, json, BinaryIO, Iterable,
+    Counter, defaultdict, multiprocessing,
+    dataclass
+)
 
 PAT_GPT2 = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 PAT_SPECIAL_TOKEN = {
@@ -58,7 +55,7 @@ class Tokenizer:
             merges: list[tuple[bytes, bytes]]
             pecial_tokens: list[str] | None = None
         """
-        self.merges = merges
+        self.merges = {}
         self.special_tokens = special_tokens or {}
         self.vocab = self._build_vocab()
     

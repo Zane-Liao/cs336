@@ -1,9 +1,8 @@
-import math
-import torch
-from torch import Tensor
-from torch.nn import Module, ModuleList, Parameter
-from torch.optim import Optimizer
-
+from utils.core_imports import (
+    os, math, jaxtyping, torch, Tensor, Optimizer,
+    Module, ModuleList, Parameter, sigmoid,
+    rearrange, einsum
+)
 
 __all__ = [
     "CrossEntropyLoss"
@@ -12,13 +11,13 @@ __all__ = [
 
 class Loss(Module):
     """"""
-    def __init__():
+    def __init__(self):
         raise NotImplementedError
     
 
 class WeightedLoss(Loss):
     """"""
-    def __init__():
+    def __init__(self):
         raise NotImplementedError
     
 
@@ -35,7 +34,7 @@ class CrossEntropyLoss(WeightedLoss):
     we assume batch-like dimensions always come first,
     before the vocabulary size dimension.
     """
-    def __init__():
+    def __init__(self):
         raise NotImplementedError
     
     def step(self):

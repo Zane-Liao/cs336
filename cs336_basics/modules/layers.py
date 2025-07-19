@@ -1,9 +1,9 @@
-import math
-import torch
-from torch import Tensor
-from torch.nn import Module, ModuleList, Parameter
-from torch.optim import Optimizer
-from torch import sigmoid
+from utils.core_imports import (
+    os, math, np, jaxtyping, torch, init, Tensor, Optimizer,
+    Module, ModuleList, Parameter, sigmoid,
+    rearrange, einsum
+)
+
 from .activation import SiLU, Softmax
 
 __all__ = [
@@ -21,6 +21,11 @@ __all__ = [
 
 
 class Linear(Module):
+    __constants__ = ['in_features', 'out_features']
+    in_features: int
+    out_features: int
+    weight: Tensor
+    
     def __init__(self, in_features, out_features, device=None, dtype=None):
         """
         linear transformation module.
@@ -34,9 +39,19 @@ class Linear(Module):
         
             dtype: torch.dtype | None = None Data type of the parameters
         """
-        raise NotImplementedError
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = Parameter(
+            torch.empty((in_features, out_features), **factory_kwargs)
+        )
+        std = math.sqrt(2 / (in_features + out_features))
+        init.trunc_normal_(
+            self.weight, mean=0.0, std=std, a=-3.0*std, b=3.0*std
+            )
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         """
         Apply the linear transformation to the input.
         
@@ -45,9 +60,16 @@ class Linear(Module):
         Return:
             torch.Tensor
         """
-        raise NotImplementedError
-    
+        output = x @ self.weight
+        return output
+
+
 class Embedding(Module):
+    __constants__ = ['num_embeddings', 'embedding_dim']
+    num_embeddings: int
+    embedding_dim: int
+    weight: Tensor
+    
     def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None):
         """
         an embedding module.
@@ -61,7 +83,16 @@ class Embedding(Module):
             
             dtype: torch.dtype | None = None Data type of the parameters
         """
-        raise NotImplementedError
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.weight = Parameter(
+            torch.empty((num_embeddings, embedding_dim), **factory_kwargs)
+        )
+        init.trunc_normal_(
+            self.weight, mean=0.0, std=1.0, a=-3.0, b=3.0
+        )
     
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         """
@@ -72,10 +103,13 @@ class Embedding(Module):
         Return:
             torch.Tensor
         """
-        raise NotImplementedError
+        return torch.embedding(self.weight, token_ids)
 
 
 class RMSNorm(Module):
+    """
+    I refer to torch concise implementation
+    """
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
         """
         Construct the RMSNorm module.
@@ -89,7 +123,12 @@ class RMSNorm(Module):
         
             dtype: torch.dtype | None = None Data type of the parameters
         """
-        raise NotImplementedError
+        super().__init__()
+        self.eps = eps
+        self.weight = Parameter(torch.ones(d_model, device=device, dtype=dtype))
+        
+    def _norm(self, x):
+        return x * torch.rsqrt(torch.mean(x * x, dim=-1, keepdim=True) + self.eps)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -101,7 +140,9 @@ class RMSNorm(Module):
         Return:
             torch.Tensor
         """
-        raise NotImplementedError
+        # In torch, x.float() => float32
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
 
 
 class GLU(Module):
@@ -113,7 +154,7 @@ class GLU(Module):
         """"""
         raise NotImplementedError
     
-
+# position-wise feed-forward network
 class SwiGLU(Module):
     def __init__(self):
         """"""

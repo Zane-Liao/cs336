@@ -15,9 +15,9 @@ without step-by-step, you can try it.
 Warning: Unpredictable errors may occur, so use with caution.
 ----
 """
-import subprocess
-import argparse
-import yaml
+from utils.imports import (
+    yaml, argparse, subprocess
+)
 
 
 def train_main():

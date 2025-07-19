@@ -1,9 +1,9 @@
-import math
-import torch
-from torch import Tensor
-from torch.nn import Module, ModuleList, Parameter
-from torch.optim import Optimizer
-from torch import sigmoid
+from utils.core_imports import (
+    os, math, jaxtyping, torch, Tensor, Optimizer,
+    Module, ModuleList, Parameter, sigmoid,
+    rearrange, einsum
+)
+
 
 __all__ = [
     "SiLU",
@@ -12,12 +12,18 @@ __all__ = [
 
 
 class SiLU(Module):
-    def __init__():
+    def __init__(self):
         """"""
         raise NotImplementedError
+    
+    def forward(self):
+        raise NotImplementedError
 
-   
+
 class Softmax(Module):
-    def __init__():
+    def __init__(self):
         """"""
+        raise NotImplementedError
+    
+    def forward(self):
         raise NotImplementedError

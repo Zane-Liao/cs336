@@ -1,9 +1,9 @@
-import regex as re 
-import math
-import torch
-from torch import Tensor
-from torch.nn import Module, ModuleList, Sequential, Parameter
-from torch.optim import Optimizer
+from utils.core_imports import (
+    math, jaxtyping, torch, Tensor, Optimizer,
+    Module, ModuleList, Parameter, sigmoid,
+    rearrange, einsum
+)
+
 from .activation import (
     SiLU,
     Softmax
@@ -28,5 +28,8 @@ from .optimizer import SGD, AdamW
 
 class DenseTransformerDecoder(Module):
     """"""
-    def __init__():
+    def __init__(self):
+        raise NotImplementedError
+    
+    def forward(self):
         raise NotImplementedError
