@@ -5,7 +5,7 @@ from utils.core_imports import (
 )
 
 from .activation import (
-    SiLU,
+    GLU,
     Softmax
 )
 
@@ -13,7 +13,6 @@ from .layers import (
     Embedding,
     Linear,
     RMSNorm,
-    GLU,
     SwiGLU,
     RotaryPositionalEmbedding,
     ScaledDotProductAttention,

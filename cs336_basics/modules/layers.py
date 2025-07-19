@@ -4,13 +4,12 @@ from utils.core_imports import (
     rearrange, einsum
 )
 
-from .activation import SiLU, Softmax
+from .activation import GLU, Softmax, silu
 
 __all__ = [
     "Embedding",
     "Linear",
     "RMSNorm",
-    "GLU",
     "SwiGLU",
     "RotaryPositionalEmbedding",
     "ScaledDotProductAttention",
@@ -145,24 +144,20 @@ class RMSNorm(Module):
         return output * self.weight
 
 
-class GLU(Module):
-    def __init__(self, input_dim, output_dim):
-        """"""
-        raise NotImplementedError
-    
-    def forward(self):
-        """"""
-        raise NotImplementedError
-    
 # position-wise feed-forward network
+# Come from pytorch PR: Support Swiglu for Module and functional #144465
 class SwiGLU(Module):
-    def __init__(self):
-        """"""
-        raise NotImplementedError
+    def __init__(self, d_model: int, d_ff: int, dim: int = -1) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.w1 = Linear(d_ff, d_model) 
+        self.w2 = Linear(d_model, d_ff)
+        self.w3 = Linear(d_ff, d_model)
+        self.dim = dim
     
-    def forward(self):
-        """"""
-        raise NotImplementedError
+    def forward(self, x: Tensor) -> Tensor:
+        return self.w3(self.w1(x) * silu(self.w2(x)))
 
 
 class RotaryPositionalEmbedding(Module):

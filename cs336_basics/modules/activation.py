@@ -4,20 +4,23 @@ from utils.core_imports import (
     rearrange, einsum
 )
 
-
 __all__ = [
-    "SiLU",
+    "GLU",
     "Softmax"
 ]
 
 
-class SiLU(Module):
-    def __init__(self):
-        """"""
-        raise NotImplementedError
+class GLU(Module):
+    def __init__(self, dim: int = -1) -> None:
+        super().__init__()
+        self.dim = dim
     
-    def forward(self):
-        raise NotImplementedError
+    def forward(self, input: Tensor) -> Tensor:
+        return torch._C._nn.glu(input, self.dim)
+
+
+def silu(self: Tensor) -> Tensor:
+    return self * torch.sigmoid(self)
 
 
 class Softmax(Module):
