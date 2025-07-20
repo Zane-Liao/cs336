@@ -147,7 +147,7 @@ class RMSNorm(Module):
 # position-wise feed-forward network
 # Come from pytorch PR: Support Swiglu for Module and functional 144465
 class SwiGLU(Module):
-    def __init__(self, d_model: int, d_ff: int):
+    def __init__(self, d_model: int, d_ff: int) -> None:
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
@@ -160,6 +160,7 @@ class SwiGLU(Module):
         return self.w2(silu(self.w1(x)) * self.w3(x))
 
 
+# I referred to some online Solution
 class RotaryPositionalEmbedding(Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
         """
@@ -174,7 +175,15 @@ class RotaryPositionalEmbedding(Module):
             
             device: torch.device | None = None Device to store the buffer on
         """
-        raise NotImplementedError
+        super().__init__()
+        half_dim = d_k // 2
+        self.theta = (1. / theta ** (torch.arange(0, half_dim, device=device) / half_dim))
+        
+        self.max_seq_len = torch.arange(max_seq_len, device=device)
+        angle_max_seq_len = torch.einsum("i,j->ij", self.max_seq_len, self.theta)
+
+        self.register_buffer("sin", torch.sin(angle_max_seq_len), persistent=False)
+        self.register_buffer("cos", torch.cos(angle_max_seq_len), persistent=False)
     
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """
@@ -190,8 +199,17 @@ class RotaryPositionalEmbedding(Module):
         Return:
             torch.Tensor
         """
-        raise NotImplementedError
-
+        sin = self.sin[token_positions]
+        cos = self.cos[token_positions]
+        
+        x_even = x[..., 0::2] 
+        x_odd = x[..., 1::2]
+        
+        rotated_even = x_even * cos - x_odd * sin
+        rotated_odd = x_even * sin + x_odd * cos
+        
+        return torch.stack([rotated_even, rotated_odd], dim=-1).flatten(-2)
+        
 
 class ScaledDotProductAttention(Module):
     """

@@ -18,7 +18,7 @@ class GLU(Module):
     def forward(self, input: Tensor) -> Tensor:
         return torch._C._nn.glu(input, self.dim)
 
-
+# swish function equal silu 
 def silu(x: Tensor) -> Tensor:
     return x * torch.sigmoid(x)
 

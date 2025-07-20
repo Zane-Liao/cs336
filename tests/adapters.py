@@ -9,12 +9,11 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 from cs336_basics.tokenizer import *
-from cs336_basics.modules.loss import *
+from cs336_basics.modules.loss import CrossEntropyLoss
 from cs336_basics.modules.layers import *
 from cs336_basics.modules.optimizer import *
-from cs336_basics.modules.activation import *
 from cs336_basics.modules.transformer import *
-from cs336_basics.modules.activation import silu
+from cs336_basics.modules.activation import Softmax, silu
 
 
 def run_linear(
@@ -68,6 +67,7 @@ def run_embedding(
     em = Embedding(vocab_size, d_model)
     with torch.no_grad():
         em.weight.copy_(weights)
+
     return em(token_ids)
 
 
@@ -218,7 +218,8 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+    return rope(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -399,6 +400,7 @@ def run_rmsnorm(
     rms_norm = RMSNorm(d_model, eps)
     with torch.no_grad():
         rms_norm.weight.copy_(weights)
+
     return rms_norm(in_features)
 
 
