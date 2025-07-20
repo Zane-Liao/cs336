@@ -14,6 +14,7 @@ from cs336_basics.modules.layers import *
 from cs336_basics.modules.optimizer import *
 from cs336_basics.modules.activation import *
 from cs336_basics.modules.transformer import *
+from cs336_basics.modules.activation import silu
 
 
 def run_linear(
@@ -39,7 +40,7 @@ def run_linear(
     # tracking gradients and not record them in the computational graph,
     # We are modifying parameters instead of doing training.
     with torch.no_grad():
-        m.weight.copy_(weights.T)
+        m.weight.copy_(weights)
     # in_fectures ==> x: torch.Tensor
     # m.forward(in_features) with no call __call__()
     # m.__call__(in_features) => Module.__call__() call forward()
@@ -94,18 +95,14 @@ def run_swiglu(
     """
     # Example:
     # If your state dict keys match, you can use `load_state_dict()`
-    # swiglu.load_state_dict(weights)
     # You can also manually assign the weights
     swiglu = SwiGLU(d_model, d_ff)
     with torch.no_grad():
-        # swiglu.w1.weight.copy_(w1_weight.T)
-        # swiglu.w2.weight.copy_(w2_weight.T)
-        # swiglu.w3.weight.copy_(w3_weight.T)
-        swiglu.w1.weight.data = w1_weight
-        swiglu.w2.weight.data = w2_weight
-        swiglu.w3.weight.data = w3_weight
-    return swiglu(in_features)
+        swiglu.w1.weight.data.copy_(w1_weight)
+        swiglu.w2.weight.data.copy_(w2_weight)
+        swiglu.w3.weight.data.copy_(w3_weight)
 
+    return swiglu(in_features)
 
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
@@ -416,7 +413,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(

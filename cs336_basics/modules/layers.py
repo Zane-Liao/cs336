@@ -43,7 +43,7 @@ class Linear(Module):
         self.in_features = in_features
         self.out_features = out_features
         self.weight = Parameter(
-            torch.empty((in_features, out_features), **factory_kwargs)
+            torch.empty((out_features, in_features), **factory_kwargs)
         )
         std = math.sqrt(2 / (in_features + out_features))
         init.trunc_normal_(
@@ -59,7 +59,7 @@ class Linear(Module):
         Return:
             torch.Tensor
         """
-        output = x @ self.weight
+        output = x @ self.weight.T
         return output
 
 
@@ -145,19 +145,19 @@ class RMSNorm(Module):
 
 
 # position-wise feed-forward network
-# Come from pytorch PR: Support Swiglu for Module and functional #144465
+# Come from pytorch PR: Support Swiglu for Module and functional 144465
 class SwiGLU(Module):
-    def __init__(self, d_model: int, d_ff: int, dim: int = -1) -> None:
+    def __init__(self, d_model: int, d_ff: int):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.w1 = Linear(d_ff, d_model) 
-        self.w2 = Linear(d_model, d_ff)
-        self.w3 = Linear(d_ff, d_model)
-        self.dim = dim
-    
-    def forward(self, x: Tensor) -> Tensor:
-        return self.w3(self.w1(x) * silu(self.w2(x)))
+
+        self.w1 = Linear(d_model, d_ff) 
+        self.w2 = Linear(d_ff, d_model)
+        self.w3 = Linear(d_model, d_ff)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.w2(silu(self.w1(x)) * self.w3(x))
 
 
 class RotaryPositionalEmbedding(Module):

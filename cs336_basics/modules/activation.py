@@ -19,8 +19,8 @@ class GLU(Module):
         return torch._C._nn.glu(input, self.dim)
 
 
-def silu(self: Tensor) -> Tensor:
-    return self * torch.sigmoid(self)
+def silu(x: Tensor) -> Tensor:
+    return x * torch.sigmoid(x)
 
 
 class Softmax(Module):
