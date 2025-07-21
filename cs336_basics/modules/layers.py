@@ -4,7 +4,7 @@ from utils.core_imports import (
     rearrange, einsum
 )
 
-from .activation import GLU, Softmax, silu
+from .activation import GLU, Softmax, silu, scaled_dot_product_attention
 
 __all__ = [
     "Embedding",
@@ -228,11 +228,11 @@ class ScaledDotProductAttention(Module):
     [adapters.run_scaled_dot_product_attention].
     """
     def __init__(self):
-        raise NotImplementedError
+        super().__init__()
     
-    def forward(self):
-        raise NotImplementedError
-    
+    def forward(self, query, key, value, mask):
+        return scaled_dot_product_attention(query, key, value, mask)
+
 
 class MultiHeadSelfAttention(Module):
     """

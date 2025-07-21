@@ -13,7 +13,9 @@ from cs336_basics.modules.loss import CrossEntropyLoss
 from cs336_basics.modules.layers import *
 from cs336_basics.modules.optimizer import *
 from cs336_basics.modules.transformer import *
-from cs336_basics.modules.activation import Softmax, silu
+from cs336_basics.modules.activation import (
+    Softmax, silu, scaled_dot_product_attention
+)
 
 
 def run_linear(
@@ -122,7 +124,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    score = ScaledDotProductAttention()
+    return score(Q, K, V, mask)
 
 
 def run_multihead_self_attention(

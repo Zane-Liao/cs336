@@ -5,6 +5,7 @@ from utils.core_imports import (
 )
 from typing import Optional
 
+
 __all__ = [
     "GLU",
     "Softmax"
@@ -19,9 +20,27 @@ class GLU(Module):
     def forward(self, input: Tensor) -> Tensor:
         return torch._C._nn.glu(input, self.dim)
 
+
 # swish function equal silu 
 def silu(x: Tensor) -> Tensor:
     return x * torch.sigmoid(x)
+
+# cal attention-score
+def scaled_dot_product_attention(
+    query: Tensor,
+    key: Tensor, 
+    value: Tensor, 
+    mask: Tensor | None = None,
+) -> Tensor:
+    d_k = key.shape[-1]
+    # scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+    # We use torch.einsum, not code: from einops import einsum
+    scores = torch.einsum("... q d, ... k d -> ... q k", query, key) / math.sqrt(d_k)
+
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+    softmax = Softmax()
+    return softmax(scores) @ value
 
 
 class Softmax(Module):
