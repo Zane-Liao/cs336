@@ -209,7 +209,7 @@ class RotaryPositionalEmbedding(Module):
         rotated_odd = x_even * sin + x_odd * cos
         
         return torch.stack([rotated_even, rotated_odd], dim=-1).flatten(-2)
-        
+
 
 class ScaledDotProductAttention(Module):
     """

@@ -3,6 +3,7 @@ from utils.core_imports import (
     Module, ModuleList, Parameter, sigmoid,
     rearrange, einsum
 )
+from typing import Optional
 
 __all__ = [
     "GLU",
@@ -24,9 +25,12 @@ def silu(x: Tensor) -> Tensor:
 
 
 class Softmax(Module):
-    def __init__(self):
-        """"""
-        raise NotImplementedError
+    __constants__ = ["dim"]
+    dim: Optional[int]
     
-    def forward(self):
-        raise NotImplementedError
+    def __init__(self, dim: int = -1) -> None:
+        super().__init__()
+        self.dim = dim
+    
+    def forward(self, input: Tensor) -> Tensor:
+        return torch.softmax(input, dim=-1)
