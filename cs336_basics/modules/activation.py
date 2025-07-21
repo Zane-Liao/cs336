@@ -5,21 +5,10 @@ from utils.core_imports import (
 )
 from typing import Optional
 
-
 __all__ = [
     "GLU",
     "Softmax"
 ]
-
-
-class GLU(Module):
-    def __init__(self, dim: int = -1) -> None:
-        super().__init__()
-        self.dim = dim
-    
-    def forward(self, input: Tensor) -> Tensor:
-        return torch._C._nn.glu(input, self.dim)
-
 
 # swish function equal silu 
 def silu(x: Tensor) -> Tensor:
@@ -41,6 +30,14 @@ def scaled_dot_product_attention(
         scores = scores.masked_fill(mask == 0, float('-inf'))
     softmax = Softmax()
     return softmax(scores) @ value
+
+class GLU(Module):
+    def __init__(self, dim: int = -1) -> None:
+        super().__init__()
+        self.dim = dim
+    
+    def forward(self, input: Tensor) -> Tensor:
+        return torch._C._nn.glu(input, self.dim)
 
 
 class Softmax(Module):

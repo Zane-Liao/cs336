@@ -105,10 +105,8 @@ class Embedding(Module):
         return torch.embedding(self.weight, token_ids)
 
 
+# I refer to torch concise implementation
 class RMSNorm(Module):
-    """
-    I refer to torch concise implementation
-    """
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
         """
         Construct the RMSNorm module.
@@ -229,7 +227,7 @@ class ScaledDotProductAttention(Module):
     """
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, query, key, value, mask):
         return scaled_dot_product_attention(query, key, value, mask)
 
@@ -237,17 +235,60 @@ class ScaledDotProductAttention(Module):
 class MultiHeadSelfAttention(Module):
     """
     Implement causal multi-head self-attention as a torch.nn.Module.
+        We have (batch_size, seq_len, d_model)
+        reshape (batch_size, seq_len, h, d_k)
+        d_model == h * d_k ⟹ d_k = d_model // h
+        
     
     Parameters:
         d_model: int Dimensionality of the Transformer block inputs.
-        
+
         num_heads: int Number of heads to use in multi-head self-attention.
+
+        rope: RotaryPositionalEmbedding.
+
+        max_seq_len: parameter for RotaryPositionalEmbedding.
+
+        theta: parameter for RotaryPositionalEmbedding.
     """
-    def __init__(self):
-        raise NotImplementedError
-    
-    def forward(self):
-        raise NotImplementedError
+    def __init__(self,
+                d_model: int,
+                num_heads: int,
+                rope: RotaryPositionalEmbedding,
+                max_seq_len: int,
+                theta: float,
+                ):
+        self.theta = theta
+        self.max_seq_len = max_seq_len
+        d_k = d_model // num_heads
+        self.rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+        self.w_qkv = Linear(d_model, d_model*3)
+        self.w_o = Linear(d_model, d_model)
+
+    def forward(self, x: Tensor, token_position: Tensor) -> Tensor:
+        seq_len = x.shape[-2]
+        # The linear transformation
+        linear_qkv = Linear(torch.cat([self.w_qkv]), x)
+        query, key, value = linear_qkv.chunk(3, -1)
+        
+        # dim transformation
+        query = rearrange(query, "b t (h d) -> b h t d", h=self.num_heads)
+        key = rearrange(key, "b t (h d) -> b h t d", h=self.num_heads)
+        value = rearrange(value, "b t (h d) -> b h t d", h=self.num_heads)
+        
+        # RoPE
+        query = self.rope(query, token_position)
+        key = self.rope(key, token_position)
+        
+        # Gen Causal Mask
+        causal_mask = torch.tril(torch.ones(seq_len, seq_len), diagonal=1).bool()
+        # Expand to degree
+        causal_mask = causal_mask[None, None, :, :]
+        
+        # cal attention score
+        score = ScaledDotProductAttention()
+        output = score(query, key, value, causal_mask)
+        return self.w_o(rearrange(output, "b h t d -> b t (h d)"))
 
 
 class TransformerBlock(Module):
