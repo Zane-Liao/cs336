@@ -1,7 +1,7 @@
 from utils.core_imports import (
     os, math, np, jaxtyping, torch, init, Tensor, Optimizer,
-    Module, ModuleList, Parameter, sigmoid,
-    rearrange, einsum
+    Module, ModuleList, Parameter, Optional,
+    sigmoid, rearrange, einsum
 )
 
 from .activation import GLU, Softmax, silu, scaled_dot_product_attention
@@ -239,56 +239,57 @@ class MultiHeadSelfAttention(Module):
         reshape (batch_size, seq_len, h, d_k)
         d_model == h * d_k ⟹ d_k = d_model // h
         
-    
     Parameters:
-        d_model: int Dimensionality of the Transformer block inputs.
+        d_model: int Dimensionality of the Transformer block inputs
 
-        num_heads: int Number of heads to use in multi-head self-attention.
+        num_heads: int Number of heads to use in multi-head self-attention
 
-        rope: RotaryPositionalEmbedding.
+        Datermine whether rope_exist: (RotaryPositionalEmbedding exists) true or false
+        
+        theta: parameter for RotaryPositionalEmbedding
 
-        max_seq_len: parameter for RotaryPositionalEmbedding.
-
-        theta: parameter for RotaryPositionalEmbedding.
+        max_seq_len: parameter for RotaryPositionalEmbedding
+        
+        token_positions: parameter for RotaryPositionalEmbedding
     """
-    def __init__(self,
-                d_model: int,
-                num_heads: int,
-                rope: RotaryPositionalEmbedding,
-                max_seq_len: int,
-                theta: float,
-                ):
-        self.theta = theta
-        self.max_seq_len = max_seq_len
-        d_k = d_model // num_heads
-        self.rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
-        self.w_qkv = Linear(d_model, d_model*3)
-        self.w_o = Linear(d_model, d_model)
+    def __init__(self, d_model: int, num_heads: int):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.qkv_proj = Linear(d_model, 3 * d_model)
+        self.o_proj = Linear(d_model, d_model)
 
-    def forward(self, x: Tensor, token_position: Tensor) -> Tensor:
-        seq_len = x.shape[-2]
-        # The linear transformation
-        linear_qkv = Linear(torch.cat([self.w_qkv]), x)
-        query, key, value = linear_qkv.chunk(3, -1)
+    def forward(self,
+                in_features: Tensor,
+                rope_exist: bool = False,
+                theta: float | None = None,
+                max_seq_len: int | None = None, 
+                token_positions: Tensor | None = None
+                ):
+        d_k = self.d_model // self.num_heads
+        self.rope_exist = rope_exist
+        self.rope: Optional[RotaryPositionalEmbedding] = (
+            RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+            if rope_exist else None
+            )
         
-        # dim transformation
-        query = rearrange(query, "b t (h d) -> b h t d", h=self.num_heads)
-        key = rearrange(key, "b t (h d) -> b h t d", h=self.num_heads)
-        value = rearrange(value, "b t (h d) -> b h t d", h=self.num_heads)
+        batch_size, seq_len, _ = in_features.shape
+
+        qkv = self.qkv_proj(in_features)
+        q, k, v = qkv.chunk(3, dim=-1)
         
-        # RoPE
-        query = self.rope(query, token_position)
-        key = self.rope(key, token_position)
+        q = rearrange(q, "b t (h d) -> b h t d", h=self.num_heads)
+        k = rearrange(k, "b t (h d) -> b h t d", h=self.num_heads)
+        v = rearrange(v, "b t (h d) -> b h t d", h=self.num_heads)
+
+        if self.rope_exist is True:
+            q = self.rope(q, token_positions)
+            k = self.rope(k, token_positions)
+
+        casual_mask = torch.triu(torch.ones(1, 1, seq_len, seq_len), diagonal=1).bool()
+        output = scaled_dot_product_attention(q, k, v, torch.logical_not(casual_mask))
         
-        # Gen Causal Mask
-        causal_mask = torch.tril(torch.ones(seq_len, seq_len), diagonal=1).bool()
-        # Expand to degree
-        causal_mask = causal_mask[None, None, :, :]
-        
-        # cal attention score
-        score = ScaledDotProductAttention()
-        output = score(query, key, value, causal_mask)
-        return self.w_o(rearrange(output, "b h t d -> b t (h d)"))
+        return self.o_proj(rearrange(output, "b h t d -> b t (h d)"))
 
 
 class TransformerBlock(Module):
