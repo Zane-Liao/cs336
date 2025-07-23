@@ -5,6 +5,7 @@ from utils.core_imports import (
 )
 
 from .activation import GLU, Softmax, silu, scaled_dot_product_attention
+from jaxtyping import Float, Int
 
 __all__ = [
     "Embedding",
@@ -384,15 +385,41 @@ class TransformerLM(Module):
                 vocab_size: int,
                 context_length: int,
                 num_layers: int,
-                ):
-        raise NotImplementedError
-    
-    def forward(self,
                 d_model: int, 
                 num_heads: int,
                 d_ff: int, 
                 rope_theta: float,
-                weights: dict[str, Tensor],
-                in_indices: Tensor
                 ):
-        raise NotImplementedError
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.context_length = context_length
+        self.num_layers = num_layers
+        self.embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+
+        self.layers = ModuleList(
+            [
+                TransformerBlock(
+                    d_model=d_model,
+                    num_heads=num_heads,
+                    d_ff=d_ff,
+                    theta=rope_theta,
+                    max_seq_len=context_length,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+
+        self.ln_final = RMSNorm(d_model=d_model)
+        self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
+
+    def forward(self, x: Int[Tensor, "... sequence_length"]) -> Float[Tensor, "... sequence_length vocab_size"]:
+        _, sequence_length = x.size()
+
+        x = self.embedding(x)
+        
+        for layer in self.layers:
+            x = layer(x)
+            
+        x = self.ln_final(x)
+
+        return self.lm_head(x)
