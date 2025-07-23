@@ -120,9 +120,10 @@ class RMSNorm(Module):
         
             dtype: torch.dtype | None = None Data type of the parameters
         """
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.eps = eps
-        self.weight = Parameter(torch.ones(d_model, device=device, dtype=dtype))
+        self.weight = Parameter(torch.ones(d_model, **factory_kwargs))
         
     def _norm(self, x):
         return x * torch.rsqrt(torch.mean(x * x, dim=-1, keepdim=True) + self.eps)
@@ -183,7 +184,7 @@ class RotaryPositionalEmbedding(Module):
         self.register_buffer("sin", torch.sin(angle_max_seq_len), persistent=False)
         self.register_buffer("cos", torch.cos(angle_max_seq_len), persistent=False)
     
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor, token_positions: Tensor) -> Tensor:
         """
         Process an input tensor of shape (..., seq_len, d_k) and return
         a tensor of the same shape. Note that you should tolerate
@@ -250,28 +251,40 @@ class MultiHeadSelfAttention(Module):
 
         max_seq_len: parameter for RotaryPositionalEmbedding
         
-        token_positions: parameter for RotaryPositionalEmbedding
+        rope_exist: parameter for RotaryPositionalEmbedding
     """
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self,
+                 d_model: int,
+                 num_heads: int,
+                 theta: float | None = None,
+                 max_seq_len: int | None = None,
+                 rope_exist: bool | None = None,
+                 device=None,
+                 dtype=None):
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
-        self.qkv_proj = Linear(d_model, 3 * d_model)
-        self.o_proj = Linear(d_model, d_model)
+        self.d_k = d_model // num_heads
+
+        self.qkv_proj = Linear(d_model, 3 * d_model, **factory_kwargs)
+        self.o_proj = Linear(d_model, d_model, **factory_kwargs)
+        
+        self.rope_exist = rope_exist
+        if self.rope_exist:
+            self.rope = RotaryPositionalEmbedding(
+                theta=theta,
+                d_k=self.d_k,
+                max_seq_len=max_seq_len,
+                device=device
+            )
+        else:
+            self.rope = None
 
     def forward(self,
                 in_features: Tensor,
-                rope_exist: bool = False,
-                theta: float | None = None,
-                max_seq_len: int | None = None, 
-                token_positions: Tensor | None = None
-                ):
-        d_k = self.d_model // self.num_heads
-        self.rope_exist = rope_exist
-        self.rope: Optional[RotaryPositionalEmbedding] = (
-            RotaryPositionalEmbedding(theta, d_k, max_seq_len)
-            if rope_exist else None
-            )
+                token_positions: Optional[Tensor] = None
+               ) -> Tensor:
         
         batch_size, seq_len, _ = in_features.shape
 
@@ -282,12 +295,18 @@ class MultiHeadSelfAttention(Module):
         k = rearrange(k, "b t (h d) -> b h t d", h=self.num_heads)
         v = rearrange(v, "b t (h d) -> b h t d", h=self.num_heads)
 
-        if self.rope_exist is True:
+        if self.rope_exist:
+            if token_positions is None:
+                raise ValueError("token_positions must be provided when use_rope is True.")
             q = self.rope(q, token_positions)
             k = self.rope(k, token_positions)
 
-        casual_mask = torch.triu(torch.ones(1, 1, seq_len, seq_len), diagonal=1).bool()
-        output = scaled_dot_product_attention(q, k, v, torch.logical_not(casual_mask))
+        causal_mask = torch.triu(
+            torch.ones(seq_len, seq_len, device=q.device, dtype=torch.bool),
+            diagonal=1
+        )
+        
+        output = scaled_dot_product_attention(q, k, v, ~causal_mask)
         
         return self.o_proj(rearrange(output, "b h t d -> b t (h d)"))
 
@@ -303,12 +322,47 @@ class TransformerBlock(Module):
         
         d_ff: int Dimensionality of the position-wise feed-forward inner layer.
     """
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self,
+                d_model: int,
+                num_heads: int,
+                d_ff: int,
+                theta: float | None = None,
+                max_seq_len: int | None = None,
+                device=None,
+                dtype=None
+                ):
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+
+        self.rms_norm1 = RMSNorm(d_model, **factory_kwargs)
+        self.self_attn = MultiHeadSelfAttention(
+            d_model=d_model,
+            num_heads=num_heads,
+            theta=theta,
+            max_seq_len=max_seq_len,
+            rope_exist=True,
+            **factory_kwargs
+            )
+
+        self.rms_norm2 = RMSNorm(d_model, **factory_kwargs)
+        self.ff = SwiGLU(d_model, d_ff)
     
-    def forward(self):
-        raise NotImplementedError
-    
+    def forward(self,
+                x: Tensor
+                ):
+        # Create token_positions
+        seq_len = x.shape[1]
+        token_positions = torch.arange(seq_len, device=x.device)
+
+        attn_output = self.self_attn(self.rms_norm1(x),
+                                         token_positions=token_positions
+                                        )
+        y = x + attn_output
+        
+        return y + self.ff(self.rms_norm2(y))
+
 
 class TransformerLM(Module):
     """
@@ -326,8 +380,19 @@ class TransformerLM(Module):
         
         num_layers: int The number of Transformer blocks to use.
     """
-    def __init__(self):
+    def __init__(self,
+                vocab_size: int,
+                context_length: int,
+                num_layers: int,
+                ):
         raise NotImplementedError
     
-    def forward(self):
+    def forward(self,
+                d_model: int, 
+                num_heads: int,
+                d_ff: int, 
+                rope_theta: float,
+                weights: dict[str, Tensor],
+                in_indices: Tensor
+                ):
         raise NotImplementedError

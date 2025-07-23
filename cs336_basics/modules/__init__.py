@@ -26,7 +26,6 @@ from .layers import (
 
 from .loss import CrossEntropyLoss
 from .optimizer import SGD, AdamW
-from .transformer import DenseTransformerDecoder
 
 __all__ = [
     "SiLU",

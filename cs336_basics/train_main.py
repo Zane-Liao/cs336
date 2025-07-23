@@ -15,7 +15,7 @@ without step-by-step, you can try it.
 Warning: Unpredictable errors may occur, so use with caution.
 ----
 """
-from utils.imports import (
+from utils.core_imports import (
     yaml, argparse, subprocess
 )
 

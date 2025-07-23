@@ -12,7 +12,6 @@ from cs336_basics.tokenizer import *
 from cs336_basics.modules.loss import CrossEntropyLoss
 from cs336_basics.modules.layers import *
 from cs336_basics.modules.optimizer import *
-from cs336_basics.modules.transformer import *
 from cs336_basics.modules.activation import (
     Softmax, silu, scaled_dot_product_attention
 )
@@ -205,18 +204,20 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    rope_attention = MultiHeadSelfAttention(d_model, num_heads)
+    rope_attention = MultiHeadSelfAttention(d_model,
+                                            num_heads,
+                                            theta=theta,
+                                            max_seq_len=max_seq_len,
+                                            rope_exist=True,
+                                            )
     
     qkv_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
     rope_attention.qkv_proj.weight.data.copy_(qkv_weight)
     rope_attention.o_proj.weight.data.copy_(o_proj_weight)
 
-    return rope_attention(in_features,
-                     rope_exist=True,
-                     theta=theta,
-                     max_seq_len=max_seq_len, 
-                     token_positions=token_positions)
-
+    return rope_attention(in_features=in_features,
+                          token_positions=token_positions
+                          )
 
 
 def run_rope(
@@ -312,7 +313,30 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    model = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        theta=theta,
+        max_seq_len=max_seq_len,
+        )
+
+    model.self_attn.qkv_proj.weight.data.copy_(
+                torch.cat([
+                weights["attn.q_proj.weight"],
+                weights["attn.k_proj.weight"],
+                weights["attn.v_proj.weight"]
+    ], dim=0))
+
+    model.self_attn.o_proj.weight.data.copy_(weights["attn.output_proj.weight"])
+    model.rms_norm1.weight.data.copy_(weights["ln1.weight"])
+    model.ff.w1.weight.data.copy_(weights["ffn.w1.weight"])
+    model.ff.w2.weight.data.copy_(weights["ffn.w2.weight"])
+    model.ff.w3.weight.data.copy_(weights["ffn.w3.weight"])
+    model.rms_norm2.weight.data.copy_(weights["ln2.weight"])
+
+    return model(in_features)
+
 
 
 def run_transformer_lm(
