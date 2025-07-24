@@ -417,34 +417,48 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    model = TransformerLM(vocab_size=vocab_size,
-                  context_length=context_length,
-                  num_layers=num_layers,
-                  d_model=d_model,
-                  num_heads=num_heads,
-                  d_ff=d_ff,
-                  rope_theta=rope_theta)
-    
-    model.embedding.weight.data.copy_(weights["token_embeddings.weight"])
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        num_layers=num_layers,
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+    )
 
+    model.embedding.weight.data.copy_(weights["token_embeddings.weight"])
+    
     for layer in range(num_layers):
         model.layers[layer].self_attn.qkv_proj.weight.data.copy_(
-                torch.cat([
+            torch.cat([
                 weights[f"layers.{layer}.attn.q_proj.weight"],
                 weights[f"layers.{layer}.attn.k_proj.weight"],
-                weights[f"layers.{layer}.attn.v_proj.weight"]
-            ], dim=0))
-
-        model.layers[layer].self_attn.o_proj.weight.data.copy_(weights[f"layers.{layer}.attn.output_proj.weight"])
-        model.layers[layer].rms_norm1.weight.data.copy_(weights[f"layers.{layer}.ln1.weight"])
-        model.layers[layer].ff.w1.weight.data.copy_(weights[f"layers.{layer}.ffn.w1.weight"])
-        model.layers[layer].ff.w2.weight.data.copy_(weights[f"layers.{layer}.ffn.w2.weight"])
-        model.layers[layer].ff.w3.weight.data.copy_(weights[f"layers.{layer}.ffn.w3.weight"])
-        model.layers[layer].rms_norm2.weight.data.copy_(weights[f"layers.{layer}.ln2.weight"])
+                weights[f"layers.{layer}.attn.v_proj.weight"],
+            ], dim=0)
+        )
+        model.layers[layer].self_attn.o_proj.weight.data.copy_(
+            weights[f"layers.{layer}.attn.output_proj.weight"]
+        )
+        model.layers[layer].rms_norm1.weight.data.copy_(
+            weights[f"layers.{layer}.ln1.weight"]
+        )
+        model.layers[layer].ff.w1.weight.data.copy_(
+            weights[f"layers.{layer}.ffn.w1.weight"]
+        )
+        model.layers[layer].ff.w2.weight.data.copy_(
+            weights[f"layers.{layer}.ffn.w2.weight"]
+        )
+        model.layers[layer].ff.w3.weight.data.copy_(
+            weights[f"layers.{layer}.ffn.w3.weight"]
+        )
+        model.layers[layer].rms_norm2.weight.data.copy_(
+            weights[f"layers.{layer}.ln2.weight"]
+        )
     
-    for name, _ in model.named_parameters():
-        print(name)
-
+    model.ln_final.weight.data.copy_(weights["ln_final.weight"])
+    model.lm_head.weight.data.copy_(weights["lm_head.weight"])
+    
     return model(in_indices)
 
 
