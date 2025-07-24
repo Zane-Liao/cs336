@@ -1,14 +1,8 @@
-"""
----
-
----
-"""
 from utils.core_imports import (
     math, jaxtyping, torch, Tensor, Optimizer,
     Module, ModuleList, Parameter, Callable, Iterable,
     Optional, sigmoid, rearrange, einsum
 )
-
 
 __all__ = [
     "SGD",
@@ -71,7 +65,7 @@ class Adam(Optimizer):
     def forward(self):
         raise NotImplementedError
 
-    
+
 class AdamW(Adam):
     """
     Implement the AdamW optimizer as a subclass of torch.optim.Optimizer.
