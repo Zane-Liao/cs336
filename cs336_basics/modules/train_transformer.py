@@ -1,8 +1,3 @@
-"""
----
-
----
-"""
 from utils.core_imports import (
     os, math, jaxtyping, torch, Tensor, Optimizer,
     Module, ModuleList, Parameter, sigmoid,

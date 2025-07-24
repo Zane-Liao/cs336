@@ -17,11 +17,12 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, sigmoid
 from torch.optim import Optimizer
-from torch.nn import init, Module, ModuleList, Parameter
+from torch.nn import init, Module, ModuleList, Parameter, _reduction as _Reduction
 from einops import rearrange, einsum
 
 
 __all__ = [
+    "_Reduction",
     "argparse",
     "BinaryIO",
     "Counter",
