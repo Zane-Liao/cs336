@@ -27,7 +27,7 @@ class _WeightedLoss(_Loss):
         weight: Optional[Tensor]=None,
         size_average=None,
         reduce=None,
-        reduction: str = "mean"
+        reduction: str = "mean",
     ) -> None:
         super().__init__(size_average, reduce, reduction)
         self.register_buffer("weight", weight)
@@ -54,7 +54,7 @@ class CrossEntropyLoss(_WeightedLoss):
         ignore_index: int = -100,
         reduce=None,
         reduction: str = "mean",
-        label_smoothing: float = 0.0
+        label_smoothing: float = 0.0,
     ) -> None:
         super().__init__()
         self.ignore_index = ignore_index
