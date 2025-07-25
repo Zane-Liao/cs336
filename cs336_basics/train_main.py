@@ -15,15 +15,45 @@ without step-by-step, you can try it.
 Warning: Unpredictable errors may occur, so use with caution.
 ----
 """
+from .tokenizer import *
+
 from utils.core_imports import (
     yaml, argparse, subprocess
 )
 
+from utils.core_imports import (
+    os, math, jaxtyping, torch, Tensor, Optimizer,
+    Module, ModuleList, Parameter, sigmoid,
+    rearrange, einsum
+)
 
-def train_main():
+from modules.activation import (
+    GLU,
+    Softmax
+)
+
+from modules.layers import TransformerLM
+
+from modules.loss import CrossEntropyLoss
+from modules.optimizer import SGD, AdamW
+
+
+def get_batch():
+    raise NotImplementedError
+
+
+def load():
+    raise NotImplementedError
+
+
+def save():
+    raise NotImplementedError
+
+
+def main():
     """"""
     raise NotImplementedError
 
 
-if __name__ == 'train_main':
-    train_main()
+if __name__ == 'main':
+    main()

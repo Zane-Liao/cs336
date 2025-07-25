@@ -1,14 +1,29 @@
-"""
----
-
----
-"""
 import importlib.metadata
 
 __version__ = importlib.metadata.version("cs336_basics")
 
+__all__ = [
+    "compute_lr",
+    "gradient_cliping",
+    "silu",
+    "Softmax",
+    "Embedding",
+    "Linear",
+    "RMSNorm",
+    "GLU",
+    "SwiGLU",
+    "RotaryPositionalEmbedding",
+    "ScaledDotProductAttention",
+    "MultiHeadSelfAttention",
+    "TransformerBlock",
+    "TransformerLM",
+    "CrossEntropyLoss",
+    "SGD", 
+    "AdamW",
+]
+
 from .activation import (
-    Softmax
+    GLU, Softmax, silu
 )
 
 from .layers import (
@@ -25,23 +40,4 @@ from .layers import (
 )
 
 from .loss import CrossEntropyLoss
-from .optimizer import SGD, AdamW
-
-__all__ = [
-    "SiLU",
-    "Softmax",
-    "Embedding",
-    "Linear",
-    "RMSNorm",
-    "GLU",
-    "SwiGLU",
-    "RotaryPositionalEmbedding",
-    "ScaledDotProductAttention",
-    "MultiHeadSelfAttention",
-    "TransformerBlock",
-    "TransformerLM",
-    "CrossEntropyLoss",
-    "SGD", 
-    "AdamW",
-    "DenseTransformerDecoder",
-]
+from .optimizer import SGD, AdamW, compute_lr, gradient_cliping
