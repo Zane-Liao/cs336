@@ -261,7 +261,8 @@ class MultiHeadSelfAttention(Module):
                  max_seq_len: int | None = None,
                  rope_exist: bool | None = None,
                  device=None,
-                 dtype=None):
+                 dtype=None,
+            ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.d_model = d_model
@@ -284,7 +285,7 @@ class MultiHeadSelfAttention(Module):
 
     def forward(self,
                 in_features: Tensor,
-                token_positions: Optional[Tensor] = None
+                token_positions: Optional[Tensor] = None,
                ) -> Tensor:
         
         batch_size, seq_len, _ = in_features.shape
@@ -330,7 +331,7 @@ class TransformerBlock(Module):
                 theta: float | None = None,
                 max_seq_len: int | None = None,
                 device=None,
-                dtype=None
+                dtype=None,
                 ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -344,7 +345,7 @@ class TransformerBlock(Module):
             theta=theta,
             max_seq_len=max_seq_len,
             rope_exist=True,
-            **factory_kwargs
+            **factory_kwargs,
             )
 
         self.rms_norm2 = RMSNorm(d_model, **factory_kwargs)
