@@ -5,8 +5,10 @@ from utils.core_imports import (
 )
 
 __all__ = [
+    "compute_lr",
+    "gradient_cliping",
     "SGD",
-    "AdamW"
+    "AdamW",
 ]
 
 
@@ -96,6 +98,7 @@ class AdamW(Optimizer):
                 if p.grad is None:
                     continue
                 
+                # Check grad is or not sparse
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise ValueError("Adam does not support sparse gradients")
@@ -109,6 +112,7 @@ class AdamW(Optimizer):
                 prev_m_t = state.get("m", torch.zeros_like(grad))
                 prev_v_t = state.get("v", torch.zeros_like(grad))
                 
+                # Compute Parameters
                 m_t = beta_1 * prev_m_t + ((1 - beta_1) * grad)
                 v_t = beta_2 * prev_v_t + ((1 - beta_2) * torch.square(grad))
                 
@@ -122,3 +126,28 @@ class AdamW(Optimizer):
                 state["t"] = t + 1
 
         return loss
+
+def compute_lr(t, alpha_max, alpha_min, t_w, t_c):
+    if t < t_w:
+        return t / t_w * alpha_max
+    if t_w <= t and t <= t_c:
+        cosine = math.cos((t - t_w) / (t_c - t_w) * math.pi)
+        return alpha_min + 0.5 * (1 + cosine) * (alpha_max - alpha_min)
+    if t > t_c:
+        return alpha_min
+
+def gradient_cliping(parameters: Iterable[Parameter], max_l2_norm: float, epsilon = 1e-6):
+    total_norm_ = 0.0
+    for p in parameters:
+        if p.grad is None:
+            continue
+        total_norm_ += p.grad.data.norm(2).item() ** 2
+    
+    total_norm = math.sqrt(total_norm_)
+    
+    if total_norm > max_l2_norm:
+        scale = max_l2_norm / (total_norm + epsilon)
+        for p in parameters:
+            if p.grad is None:
+                continue
+            p.grad.data.mul_(scale)
