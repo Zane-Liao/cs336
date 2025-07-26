@@ -1,5 +1,5 @@
 from utils.core_imports import (
-    os, math, np, jaxtyping, torch, init, Tensor, Optimizer,
+    os, math, np, json, jaxtyping, torch, init, Tensor, Optimizer,
     Module, ModuleList, Parameter, Optional,
     sigmoid, rearrange, einsum
 )
@@ -424,3 +424,103 @@ class TransformerLM(Module):
         x = self.ln_final(x)
 
         return self.lm_head(x)
+    
+    # Solution
+    def get_num_params(self, non_embedding=True):
+        """
+        Return the number of parameters in the model.
+        For non-embedding count (default), the lm_head parameters get subtracted.
+        """
+        n_params = sum(p.numel() for p in self.parameters())
+        if non_embedding:
+            n_params -= self.lm_head.weight.numel()
+
+        return n_params
+
+    # Solution
+    @torch.no_grad()
+    def generate(
+        self,
+        x: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        eos_token_id: int | None = None,
+    ):
+        """
+        Args:
+            x: LongTensor of shape `(1, sequence_length,)` or `(sequence_length, )`.
+                Input IDs to condition on when generating.
+            max_new_tokens: int
+                Maximum number of tokens to generate.
+            temperature: float
+                Temperature to use during generation.
+            top_k: int
+                If provided, only sample from the `top_k` vocab items (by probability).
+            eos_token_id: int
+                If provided, stop generation when we generate this ID.
+
+        Returns: A LongTensor of shape (max_new_tokens,) with the generated model output.
+        """
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+            
+        original_sequence_length = x.size(-1)
+
+        for _ in range(max_new_tokens):
+
+            # Take the last `context_length` tokens if the input is
+            # beyond the model's context length
+            x = x[:, -self.context_length :] if x.size(1) > self.context_length else x
+
+            # Get the logits from the model
+            logits = self.forward(x)
+
+            # Take the logits for the next token
+            next_token_logits = logits[:, -1]
+
+            # apply temperature scaling
+            temperature_scaled_next_token_logits = next_token_logits / temperature
+
+            # If top-k is provided, take the tokens with the highest score
+            if top_k:
+                topk_values, _ = torch.topk(
+                    temperature_scaled_next_token_logits,
+                    min(top_k, temperature_scaled_next_token_logits.size(-1)),
+                )
+
+                # Get the score of the kth item that we kept---items with lower scores should be masked.
+                threshold = topk_values[:, -1]
+                topk_mask = temperature_scaled_next_token_logits < threshold
+                temperature_scaled_next_token_logits.masked_fill(topk_mask, float("-inf"))
+            softmax = Softmax()
+            next_token_probabilities = softmax(temperature_scaled_next_token_logits, dim=-1)
+            next_token_id = torch.multinomial(next_token_probabilities, 1)
+
+            # End generation if we see the EOS token ID
+            if eos_token_id is not None and next_token_id.item() == eos_token_id:
+                break
+            x = torch.cat((x, next_token_id), dim=-1)
+
+        new_token_ids = x[:, original_sequence_length:]
+        return new_token_ids
+    
+    # Solution
+    @classmethod
+    def from_pretrained(cls, pretrained_model_path: str):
+        config_path = os.path.join(pretrained_model_path, "model_config.json")
+        with open(config_path) as f:
+            config = json.load(f)
+
+        model = cls(**config)
+        weights_path = os.path.join(pretrained_model_path, "model.pt")
+        state_dict = torch.load(weights_path)
+
+        # Remove _orig_mod. prefix that comes from serializing a compiled model
+        unwanted_prefix = "_orig_mod."
+        for k, _ in list(state_dict.items()):
+            if k.startswith(unwanted_prefix):
+                state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
+
+        model.load_state_dict(state_dict)
+        return model
