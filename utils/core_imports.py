@@ -13,6 +13,7 @@ __all__ = [
     "Optional",
     "Callable",
     "Iterable",
+    "Iterator",
     "defaultdict",
     "dataclass",
     "einsum",
@@ -45,7 +46,7 @@ import regex as re
 import multiprocessing
 from typing import BinaryIO, Optional
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 import torch
 from torch import Tensor, sigmoid

@@ -15,7 +15,7 @@ from cs336_basics.modules.optimizer import *
 from cs336_basics.modules.activation import (
     Softmax, silu, scaled_dot_product_attention
 )
-from cs336_basics.train_main import get_batch, load, save
+from cs336_basics.data import get_batch, load, save
 
 def run_linear(
     d_in: int,
@@ -705,8 +705,7 @@ def run_train_bpe(
     vocab, merge = train_bpe(
         input_path,
         vocab_size,
-        special_token={'<|endoftext|>': 50256},
-        num_processes=1
+        special_tokens=special_tokens,
     )
     
     return (vocab, merge)
