@@ -106,10 +106,9 @@ class Tokenizer:
         Return:
             Iterable[int]
         """
-        for string in iterable:
-            string = string.strip("\n")
-            token = self.encode(string)
-            for token_id in token:
+        for line in iterable:
+            # string = string.strip("\n")
+            for token_id in self.encode(line):
                 yield token_id
     
     def decode(self, indices: list[int]) -> str:

@@ -1,42 +1,6 @@
-"""
-----
-train_model.py
-
-Warning: This script is not applicable to Windows. 
-If you need to use it, please modify it yourself.
-
-My OS: Macos26(Linux)
-Shell: zsh
-Use argparse and yaml to configure the run
-subprocess Create shell process
-
-This file may be a redundant file, but if you need to run all at once
-without step-by-step, you can try it.
-Warning: Unpredictable errors may occur, so use with caution.
-----
-"""
-import sys, os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from .tokenizer import *
-
-from utils.core_imports import (
-    yaml, argparse, subprocess
-)
-
+import torch
 import numpy as np
 import numpy.typing as npt
-
-from utils.core_imports import (
-    math, jaxtyping, torch, Tensor, Optimizer,
-    Module, ModuleList, Parameter, sigmoid,
-    rearrange, einsum
-)
-
-from modules.layers import TransformerLM
-
-from modules.loss import CrossEntropyLoss
-from modules.optimizer import SGD, AdamW, compute_lr, gradient_cliping
 
 # Solution
 def get_batch(dataset: npt.NDArray, batch_size: int, context_length: int, device: str):
@@ -76,11 +40,3 @@ def save(model, optimizer, iteration, out):
     
     torch.save(check_point, out) 
     print(f"save {out} iterations: {iteration}")
-
-
-def train():
-    raise NotImplementedError
-
-
-if __name__ == '__main__':
-    train()
