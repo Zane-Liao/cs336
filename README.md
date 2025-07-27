@@ -9,10 +9,9 @@ and I am currently completing it
 - This is my first time writing deep learning homework related to pytorch. 
 I have only written traditional machine learning algorithms and theories
 implemented in R language or numpy before, so I often get stuck when coding.
-At this time, I often refer to other solutions. I don’t recommend
-people like me who don’t have some NLP foundation to complete
-these homeworks, because you will encounter many problems 
-that you are at a loss, and it is difficult to debug errors.
+
+- I will search for some public solutions on the Internet. 
+People with NLP foundation will be able to code better. 
 
 - My coding time frame is the same as the Stanford deadline.
 Considering that they have a good foundation and the help of the
