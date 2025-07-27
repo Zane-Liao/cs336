@@ -8,41 +8,13 @@ from utils.core_imports import (
     Counter, defaultdict, multiprocessing,
     dataclass
 )
+from typing import Iterator
+from multiprocessing import Process, Queue
 
 PAT_GPT2 = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 PAT_SPECIAL_TOKEN = {
     '<|endoftext|>': 50256
 }
-
-
-def get_stats(ids, counts=None):
-    counts = counts or Counter()
-    for pair in zip(ids, ids[1:]):
-        counts[pair] = counts.get(pair, 0) + 1
-    return counts
-
-# @karpathy
-def merge(
-    indices: list[int],
-    pair: tuple[int, int],
-    new_index: int
-) -> list[int]:  # @inspect indices, @inspect pair, @inspect new_index
-    """Return `indices`, but with all instances of `pair` replaced with `new_index`.
-    Example:
-        >>> merge([5, 6, 6, 7, 9, 1], (6, 7), 99)
-        [5, 6, 99, 9, 1]
-    """
-    new_indices = []  # @inspect new_indices
-    i = 0  # @inspect i
-    while i < len(indices):
-        if i + 1 < len(indices) and indices[i] == pair[0] and indices[i + 1] == pair[1]:
-            new_indices.append(new_index)
-            i += 2
-        else:
-            new_indices.append(indices[i])
-            i += 1
-    return new_indices
-
 
 class Tokenizer:
     def __init__(self, vocab, merges, special_tokens=None):
@@ -55,10 +27,11 @@ class Tokenizer:
             merges: list[tuple[bytes, bytes]]
             pecial_tokens: list[str] | None = None
         """
-        self.merges = {}
-        self.special_tokens = special_tokens or {}
-        self.vocab = self._build_vocab()
+        self.vocab = vocab
+        self.merges = merges
+        self.special_tokens = special_tokens or []
     
+    # Solution
     def encode(self, string: str) -> list[int]:
         """
         Encode an input text into a sequence of token IDs.
@@ -68,11 +41,45 @@ class Tokenizer:
         Return:
             list[int]
         """
-        if self.special_tokens is None:
-            self.register_special_tokens({"<|endoftext|>": 50256})
+        vocab_reversed = {v: k for k, v in self.vocab.items()}
+        byte_pretokens = pretokenize(string, self.special_tokens, drop_special_token=False)   # list[bytes]
+        byte_special_tokens = [token.encode('utf-8') for token in self.special_tokens]
+        pretokens = []
 
-        return self.encode_ordinary(string)
-        
+        for i, pretoken in enumerate(byte_pretokens):
+
+            new_pretoken = []
+
+            if pretoken in byte_special_tokens:
+                index = vocab_reversed[pretoken]
+                new_pretoken.append(index)
+            else:
+                for b in pretoken:
+                    index = vocab_reversed[bytes([b])]
+                    new_pretoken.append(index)
+
+            pretokens.append(new_pretoken)
+
+        for i, pretoken in enumerate(pretokens):
+            for merge in self.merges:
+                new_pretoken = []
+                new_index = vocab_reversed[merge[0] + merge[1]]
+                j = 0
+                while j < len(pretoken):
+                    if (j < len(pretoken)-1) and ((self.vocab[pretoken[j]], self.vocab[pretoken[j+1]]) == merge):
+                        new_pretoken.append(new_index)
+                        j += 2
+                    else:
+                        new_pretoken.append(pretoken[j])
+                        j += 1
+
+                pretoken = new_pretoken
+
+            pretokens[i] = pretoken
+
+        tokens = [token for pretoken in pretokens for token in pretoken] 
+        return tokens
+
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
         """
@@ -106,9 +113,10 @@ class Tokenizer:
         Return:
             Iterable[int]
         """
-        for line in iterable:
+        for string in iterable:
             # string = string.strip("\n")
-            for token_id in self.encode(line):
+            token = self.encode(string)
+            for token_id in token:
                 yield token_id
     
     def decode(self, indices: list[int]) -> str:
@@ -133,56 +141,6 @@ class Tokenizer:
         text_bytes = b"".join(part_bytes)
         string = text_bytes.decode("utf-8", errors="replace")
         return string
-    
-    # @karpathy
-    def _build_vocab(self):
-        # vocab is simply and deterministically derived from merges
-        vocab = {idx: bytes([idx]) for idx in range(256)}
-        for (p0, p1), idx in self.merges.items():
-            vocab[idx] = vocab[p0] + vocab[p1]
-        for special, idx in self.special_tokens.items():
-            vocab[idx] = special.encode("utf-8")
-        return vocab
-    
-    # @karpathy
-    def register_special_tokens(self, special_tokens):
-        # special_tokens is a dictionary of str -> int
-        # example: {"<|endoftext|>": 50256}
-        self.special_tokens = special_tokens
-        self.inverse_special_tokens = {v: k for k, v in special_tokens.items()}
-
-    # @karpathy
-    def _encode_chunk(self, text_bytes):
-        # return the token ids
-        # let's begin. first, convert all bytes to integers in range 0..255
-        ids = list(text_bytes)
-        while len(ids) >= 2:
-            # find the pair with the lowest merge index
-            stats = get_stats(ids)
-            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
-            # subtle: if there are no more merges available, the key will
-            # result in an inf for every single pair, and the min will be
-            # just the first pair in the list, arbitrarily
-            # we can detect this terminating case by a membership check
-            if pair not in self.merges:
-                break # nothing else can be merged anymore
-            # otherwise let's merge the best pair (lowest merge index)
-            idx = self.merges[pair]
-            ids = merge(ids, pair, idx)
-        return ids
-    
-    # @karpathy
-    def encode_ordinary(self, text):
-        """Encoding that ignores any special tokens."""
-        text_chunks = re.finditer(PAT_GPT2, text)
-        ids = []
-        for chunk in text_chunks:
-            chunk_text = chunk.group(0)
-            chunk_bytes = chunk_text.encode("utf-8")
-            chunk_ids = self._encode_chunk(chunk_bytes)
-            ids.extend(chunk_ids)
-
-        return ids
 
     
 def find_chunk_boundaries(
@@ -233,74 +191,188 @@ def find_chunk_boundaries(
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
+# Solution
+def pretokenize(text: str, special_tokens: list[str], drop_special_token: bool = True) -> list[bytes]:
+    """
+    Seperating text into pretokens
+    Special tokens are independent pretokens
+    """
+    parts = split_by_special_tokens(text, special_tokens)
 
-def process_chunk_for_stats(args):
-    file_path, start, end = args
+    tokens_list = []
+    for part in parts:
+        if part in special_tokens:
+            if not drop_special_token:
+                spec_tok_bytes = part.encode('utf-8')
+                tokens_list.append([spec_tok_bytes])
+        else:
+            str_tokens = re.findall(PAT_GPT2, part)
+            part_tokens = [s.encode('utf-8') for s in str_tokens]
+            tokens_list.append(part_tokens)
+    tokens = [token for part_tokens in tokens_list for token in part_tokens]
+    return tokens
 
-    with open(file_path, "rb") as f:
-        f.seek(start)
-        chunk_bytes = f.read(end - start)
+def get_stats(ids, counts=None):
+    counts = counts or Counter()
+    for pair in zip(ids, ids[1:]):
+        counts[pair] = counts.get(pair, 0) + 1
+    return counts
 
-    chunk_text = chunk_bytes.decode("utf-8", errors="ignore")
+# Solution
+def worker(text: str, special_tokens: list[str], q: Queue):
+    pretokens = pretokenize(text, special_tokens)
+    q.put(pretokens)
 
-    text_chunks = PAT_GPT2.finditer(chunk_text)
+# Solution
+def split_by_special_tokens(text: str, special_tokens: list[str]) -> list[str]:
+    special_tokens_sorted = sorted(special_tokens, key=lambda x: -len(x))
+    if not special_tokens_sorted:
+        parts = [text]
+    else:
+        pattern = "|".join(re.escape(tok) for tok in special_tokens_sorted)
+        parts = re.split('(' + pattern + ')', text)
 
-    chunk_stats = Counter()
-    for chunk in text_chunks:
-        chunk_str = chunk.group(0)
-        chunk_bytes = chunk_str.encode("utf-8")
-        indices = list(chunk_bytes)
-        get_stats(indices, chunk_stats)
+    return parts
 
-    return chunk_stats
+# Solution
+def merge(
+    counts: dict[tuple[int, int], int],
+    index_dict: dict[tuple[int, int],set[int]],
+    pretokens: list[list[int]],
+    max_pair: (int, int),
+    new_index: int
+) -> list[int]:
+    """Return `indices`, but with all instances of `pair` replaced with `new_index`"""
+    index_set = index_dict[max_pair]
+
+    for i in index_set:
+        pretoken = pretokens[i]
+        new_pretoken = []
+
+        pos_list = []
+        pos = 0
+        j = 0
+
+        while j < len(pretoken):
+            if (j < len(pretoken)-1) and ((pretoken[j], pretoken[j+1]) == max_pair):
+                new_pretoken.append(new_index)
+                pos_list.append(pos)
+                j += 2
+            else:
+                new_pretoken.append(pretoken[j])
+                j += 1
+            pos += 1
+
+        for pos in pos_list:
+            counts[max_pair] -= 1
+
+            if pos > 0:
+                if new_pretoken[pos-1] == new_index:
+                    counts[(max_pair[1], max_pair[0])] -= 1    
+                else:
+                    counts[(new_pretoken[pos-1], max_pair[0])] -= 1
+
+                counts[(new_pretoken[pos-1], new_pretoken[pos])] += 1
+                index_dict[(new_pretoken[pos-1], new_pretoken[pos])].add(i)
+
+            if pos < len(new_pretoken)-1:
+                if new_pretoken[pos+1] == new_index:
+                    counts[(max_pair[1], max_pair[0])] -= 1     
+                else:
+                    counts[(max_pair[1], new_pretoken[pos+1])] -= 1
+
+                counts[(new_pretoken[pos], new_pretoken[pos+1])] += 1
+                index_dict[(new_pretoken[pos], new_pretoken[pos+1])].add(i)
+
+        pretokens[i] = new_pretoken
 
 
 def train_bpe(
-    input_path: str, 
-    vocab_size: int, 
-    special_token: dict[str, int],
-    num_processes: None
+    input_path: str | os.PathLike,
+    vocab_size: int,
+    special_tokens: list[str],
+    **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    """Given the path to an input corpus, run train a BPE tokenizer and
+    output its vocabulary and merges.
 
-    if num_processes is None:
-        num_processes = multiprocessing.cpu_count()
+    Args:
+        input_path (str | os.PathLike): Path to BPE tokenizer training data.
+        vocab_size (int): Total number of items in the tokenizer's vocabulary (including special tokens).
+        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary.
+            These strings will never be split into multiple tokens, and will always be
+            kept as a single token. If these special tokens occur in the input_path,
+            they are treated as any other string.
 
+    Returns:
+        tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+            vocab:
+                The trained tokenizer vocabulary, a mapping from int (token ID in the vocabulary)
+                to bytes (token bytes)
+            merges:
+                BPE merges. Each list item is a tuple of bytes (<token1>, <token2>),
+                representing that <token1> was merged with <token2>.
+                Merges are ordered by order of creation.
+    """
+    special_tokens = special_tokens or []
+    num_merges = max(vocab_size - len(special_tokens) - 256, 0)
+
+    vocab = {}
+    vocab = {x:bytes([x]) for x in range(0,256)}
+    for i, token in enumerate(special_tokens):
+        vocab[256+i] = token.encode("utf-8")
+    merges = []
+
+    num_processes = 4
+    chunk_list = []
     with open(input_path, "rb") as f:
-        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+        boundaries = find_chunk_boundaries(f, num_processes, "<|endoftext|>".encode("utf-8"))
 
-    merges: list[tuple[bytes, bytes]] = []
-    vocab: dict[int, bytes] = {x: bytes([x]) for x in range(256)}
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            f.seek(start)
+            chunk = f.read(end - start).decode("utf-8", errors="ignore")
+            chunk_list.append(chunk)
 
-    max_merges = vocab_size - 256 - len(special_token)
+    pretokens_list = []
+    processes = []
+    q = Queue()
+    for chunk in chunk_list:
+        p = Process(target=worker, args=(chunk, special_tokens, q))
+        p.start()
+        processes.append(p)
 
-    with multiprocessing.Pool(processes=num_processes) as pool:
-        for merge_step in range(max_merges):
+    pretokens_list = [q.get() for _ in processes]
 
-            chunk_args = [(input_path, start, end) for start, end in zip(boundaries[:-1], boundaries[1:])]
-            chunk_results = pool.map(process_chunk_for_stats, chunk_args)
+    for p in processes:
+        p.join()
 
-            total_stats = Counter()
-            for chunk_stats in chunk_results:
-                total_stats.update(chunk_stats)
+    pretokens = [token for tokens in pretokens_list for token in tokens]
 
-            if not total_stats:
-                print(f"No more pairs to merge after {merge_step} steps")
-                break
+    counts = defaultdict(int)
+    index_dict = defaultdict(set)
 
-            best_pair = sorted(total_stats.items(), key=lambda x: (-x[1], x[0]))[0][0]
-            p0, p1 = best_pair
-            new_index = 256 + merge_step
-            vocab[new_index] = vocab[p0] + vocab[p1]
-            merges.append((vocab[p0], vocab[p1]))
+    for j, pretoken in enumerate(pretokens):
+        for index1, index2 in zip(pretoken, pretoken[1:]):
+            counts[index1, index2] += 1
+            index_dict[index1, index2].add(j)
 
-            if (merge_step + 1) % 10 == 0:
-                print(f" Progress: {merge_step + 1}/{max_merges} merges completed")
+    for i in range(num_merges):
+        max_pair = max(
+            counts.items(),
+            key=lambda x: (
+                x[1],  
+                vocab[x[0][0]].decode("utf-8", errors="ignore"),
+                vocab[x[0][1]].decode("utf-8", errors="ignore")
+            )
+        )[0]
 
-    for token, token_id in special_token.items():
-        vocab[token_id] = token.encode("utf-8")
+        index1, index2 = max_pair
+
+        new_index = 256 + len(special_tokens) + i
+
+        vocab[new_index] = vocab[index1] + vocab[index2]
+        merges.append((vocab[index1], vocab[index2]))
+
+        merge(counts, index_dict, pretokens, max_pair, new_index)
 
     return (vocab, merges)
-
-
-if __name__ == "__main__":
-    multiprocessing.set_start_method("fork")
