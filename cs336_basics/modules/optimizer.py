@@ -1,8 +1,9 @@
-from utils.core_imports import (
-    math, jaxtyping, torch, Tensor, Optimizer,
-    Module, ModuleList, Parameter, Callable, Iterable,
-    Optional, sigmoid, rearrange, einsum
-)
+import math
+from typing import Optional
+from collections.abc import Callable, Iterable
+import torch
+from torch.optim import Optimizer
+from torch.nn import Parameter
 
 __all__ = [
     "compute_lr",

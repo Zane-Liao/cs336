@@ -1,8 +1,7 @@
-from utils.core_imports import (
-    os, math, jaxtyping, torch, Tensor, Optimizer,
-    Module, ModuleList, Parameter, _Reduction, Optional,
-    sigmoid, rearrange, einsum
-)
+from typing import Optional
+import torch
+from torch import Tensor
+from torch.nn import Module, _reduction as _Reduction
 
 __all__ = [
     "CrossEntropyLoss"
