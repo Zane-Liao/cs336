@@ -1,11 +1,14 @@
-from utils.core_imports import (
-    os, math, np, json, jaxtyping, torch, init, Tensor, Optimizer,
-    Module, ModuleList, Parameter, Optional,
-    sigmoid, rearrange, einsum
-)
-
+import os
+import json
+import math
+from typing import Optional
 from dataclasses import dataclass
-from .activation import GLU, Softmax, silu, scaled_dot_product_attention
+import torch
+from torch import Tensor
+from torch.nn import init, Module, ModuleList, Parameter
+from einops import rearrange
+from dataclasses import dataclass
+from .activation import Softmax, silu, scaled_dot_product_attention
 from jaxtyping import Float, Int
 
 __all__ = [

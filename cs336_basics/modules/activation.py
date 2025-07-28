@@ -1,8 +1,8 @@
-from utils.core_imports import (
-    os, math, jaxtyping, torch, Tensor, Optimizer,
-    Module, ModuleList, Parameter, sigmoid,
-    rearrange, einsum
-)
+import math
+from typing import Optional
+import torch
+from torch import Tensor
+from torch.nn import Module
 from typing import Optional
 
 __all__ = [

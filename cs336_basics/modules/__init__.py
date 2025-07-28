@@ -1,7 +1,3 @@
-import importlib.metadata
-
-__version__ = importlib.metadata.version("cs336_basics")
-
 __all__ = [
     "compute_lr",
     "gradient_cliping",
@@ -30,7 +26,6 @@ from .layers import (
     Embedding,
     Linear,
     RMSNorm,
-    GLU,
     SwiGLU,
     RotaryPositionalEmbedding,
     ScaledDotProductAttention,

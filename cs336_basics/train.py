@@ -39,7 +39,7 @@ def train():
     training_args = load['training_args']
     data_args = load['data_args']
     
-    os.makedirs(data_args['checkpoints'], exist_ok=True)
+    os.makedirs(data_args['checkpoint_dir'], exist_ok=True)
     
     # 2. Initial
     print("--- Initializing ---")
