@@ -12,6 +12,9 @@ data/
 # Macos file
 .DS_Store
 
+# data
+cs336_basics/tokenizer/vocab/
+
 # Distribution / packaging
 .Python
 build/

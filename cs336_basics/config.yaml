@@ -1,0 +1,28 @@
+model_args:
+  vocab_size: 10000
+  context_length: 256
+  d_model: 512
+  num_layers: 4
+  num_heads: 16
+  d_ff: 1344
+  rope_theta: 10000.0
+
+training_args:
+  device: "cpu" # Train device, If you have h100, Please Change to "cuda"
+  batch_size: 64
+  num_epochs: 5
+  learning_rate: 0.0003
+  max_iters: 5000
+  eval_interval: 200
+  warmup_steps: 100
+  lr_decay_steps: 5000
+  min_lr: 3.0e-5
+  gradient_clip_val: 1.0
+
+data_args:
+  train_data_path: "data/train.bin"
+  valid_data_path: "data/val.bin"
+  vocab_path: "tokenizer/vocab_valid.json"
+  merges_path: "tokenizer/merges_valid.txt"
+  checkpoint_dir: "checkpoints"
+  resume_from_checkpoint: False
