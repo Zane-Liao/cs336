@@ -2,19 +2,18 @@
 # https://github.com/karpathy/minbpe/blob/master/minbpe/base.py
 # Original author: @karpathy
 # Modifications: I modified some documents, the code is basically unchanged.
-
-from utils.core_imports import (
-    os, re, time, json, BinaryIO, Iterable,
-    Counter, defaultdict, multiprocessing,
-    dataclass
-)
-from typing import Iterator
+import os
+import re
+import json
+from typing import BinaryIO, Iterable
+from collections import Counter, defaultdict
 from multiprocessing import Process, Queue
+import regex as re
 
 PAT_GPT2 = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-PAT_SPECIAL_TOKEN = {
-    '<|endoftext|>': 50256
-}
+PAT_SPECIAL_TOKEN = [
+    '<|endoftext|>'
+]
 
 class Tokenizer:
     def __init__(self, vocab, merges, special_tokens=None):
@@ -239,7 +238,7 @@ def merge(
     counts: dict[tuple[int, int], int],
     index_dict: dict[tuple[int, int],set[int]],
     pretokens: list[list[int]],
-    max_pair: (int, int),
+    max_pair: (int, int), # type: ignore
     new_index: int
 ) -> list[int]:
     """Return `indices`, but with all instances of `pair` replaced with `new_index`"""
