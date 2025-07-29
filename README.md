@@ -22,3 +22,13 @@ components you wrote, please set aside enough time (lol: at least a month)
 - I learned a lot in this class. It was hard, but worth it.
 Thanks again to Stanford University for its selfless dedication
 to facilitating off-campus learners like you and me.
+
+- Below is an image of my training parameters. My dataset is TinyStory.
+I don’t have a good graphics card and I don’t rent one. I only have an Air M2 
+(the temperature is too high and it stops at 2200 steps).
+I started using traditional plots and later switched to TensorBoard to monitor losses.
+(No careful tuning of hyperparameters, mostly from the default)
+
+
+| ![train](train.png) | ![valid](valid.png) |
+| ![GradNorm_total](GradNorm_total.svg) | ![LR](LR.svg) | ![Loss_train](Loss_train.svg) |
