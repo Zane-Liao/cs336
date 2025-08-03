@@ -10,9 +10,6 @@ and I am currently completing it
 I have only written traditional machine learning algorithms and theories
 implemented in R language or numpy before, so I often get stuck when coding.
 
-- I will search for some public solutions on the Internet. 
-People with NLP foundation will be able to code better. 
-
 - My coding time frame is the same as the Stanford deadline.
 Considering that they have a good foundation and the help of the
 teaching assistant, it should not be a big problem to complete it
