@@ -206,7 +206,7 @@ def pretokenize(text: str, special_tokens: list[str], drop_special_token: bool =
                 tokens_list.append([spec_tok_bytes])
         else:
             str_tokens = re.finditer(PAT_GPT2, part)
-            part_tokens = [s.encode('utf-8') for s in str_tokens]
+            part_tokens = [s.group().encode('utf-8') for s in str_tokens]
             tokens_list.append(part_tokens)
     tokens = [token for part_tokens in tokens_list for token in part_tokens]
     return tokens
