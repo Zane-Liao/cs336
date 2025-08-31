@@ -27,5 +27,5 @@ I started using traditional plots and later switched to TensorBoard to monitor l
 (No careful tuning of hyperparameters, mostly from the default)
 
 
-| ![train](train.png) | ![valid](valid.png) |
-| ![GradNorm_total](GradNorm_total.svg) | ![LR](LR.svg) | ![Loss_train](Loss_train.svg) |
+![train](train.png) ![valid](valid.png)
+![GradNorm_total](GradNorm_total.svg) ![LR](LR.svg) ![Loss_train](Loss_train.svg)
