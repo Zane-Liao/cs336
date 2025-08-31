@@ -1,5 +1,5 @@
 **The Transformer architecture We need to implement**
-![Decoder](Transformer.png)
+![Decoder](photos/Transformer.png)
 
 - This is my first time writing deep learning homework related to pytorch. 
 I have only written traditional machine learning algorithms and theories
