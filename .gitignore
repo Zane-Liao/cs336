@@ -10,6 +10,18 @@ __pycache__/
 # C extensions
 *.so
 
+# DataSets
+data/
+
+# Macos file
+.DS_Store
+
+# Save model
+/**cs336_basics/checkpoints
+
+# data
+/**cs336_basics/tokenizer/vocab/
+
 # Distribution / packaging
 .Python
 build/
