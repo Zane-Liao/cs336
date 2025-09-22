@@ -16,6 +16,9 @@ data/
 # Macos file
 .DS_Store
 
+# Vscode
+.vscode
+
 # Save model
 /**cs336_basics/checkpoints
 

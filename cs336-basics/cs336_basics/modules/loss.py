@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.nn import Module, _reduction as _Reduction
 
 __all__ = [
-    "CrossEntropyLoss"
+    "CrossEntropyLoss",
 ]
 
 

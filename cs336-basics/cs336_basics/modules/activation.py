@@ -7,7 +7,7 @@ from typing import Optional
 
 __all__ = [
     "GLU",
-    "Softmax"
+    "Softmax",
 ]
 
 # swish function equal silu 
