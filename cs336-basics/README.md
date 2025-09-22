@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 **The Transformer architecture We need to implement**
 ![Decoder](photos/Transformer.png)
 

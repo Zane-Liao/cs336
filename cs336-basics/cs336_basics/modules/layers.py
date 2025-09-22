@@ -20,7 +20,7 @@ __all__ = [
     "ScaledDotProductAttention",
     "MultiHeadSelfAttention",
     "TransformerBlock",
-    "TransformerLM"
+    "TransformerLM",
 ]
 
 
