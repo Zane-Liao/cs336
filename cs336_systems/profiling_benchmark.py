@@ -56,22 +56,30 @@ def run_transformer(
     )
     
     def run():
+        forward_times, backward_times = [], []
         for step in range(num_steps):
             # Forward
+            start = timeit.default_timer()
             y = model(x).mean()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            forward_times.append((timeit.default_timer() - start) * 1000)
 
             # Backward
             model.zero_grad(set_to_none=True)
+            start = timeit.default_timer()
             y.backward()
-            
-            # asyn
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
+            backward_times.append((timeit.default_timer() - start) * 1000)
+            count = step
+            print(f"{count} Forward avg: {mean(forward_times):.3f} ms, Forward sd: {sd(forward_times):.3f} ms")
+            print(f"{count} Backward avg: {mean(backward_times):.3f} ms, Backward sd: {sd(backward_times):.3f} ms")
 
     return run
 
 
-def benchmark(description: str, run: Callable, num_warmups: int = 10, num_trials: int = 3):
+def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials: int = 3):
     for _ in range(num_warmups):
         run()
         
@@ -87,7 +95,8 @@ def benchmark(description: str, run: Callable, num_warmups: int = 10, num_trials
         times.append((end_time - start_time) * 1000)
         
     mean_time = mean(times)
-    return mean_time
+    sd_time = sd(times)
+    return mean_time, sd_time
 
 
 def benchmarking():
@@ -131,11 +140,16 @@ def run_operation2(dim: int, operation: Callable) -> Callable:
 def mean(x: list[float]) -> float:
     return sum(x) / len(x)
 
+def sd(data: list[float]) -> float:
+    mean_val = sum(data) / len(data)
+    variance = sum((x - mean_val)**2 for x in data) / len(data)
+    return variance**0.5
+
 
 if __name__ == "__main__":
     model_config = TransformerConfig()
     model = TransformerLM(**model_config.__dict__)
     mark_config = BenchmarkConfig()
     run_fn = run_transformer(model, **mark_config.__dict__)
-    avg_time = benchmark("s", run_fn)
-    print(f"Average step time: {avg_time:.3f} ms")
+    avg_time, sd_time = benchmark("s", run_fn)
+    print(f"Average step time: {avg_time:.3f} ms, Sd step time: {sd_time:.3f} ms")
