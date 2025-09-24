@@ -1,21 +1,24 @@
 import os
 import time
+import math
 import timeit
 from typing import Callable
 import torch
 import torch.nn as nn
+from torch import Tensor
 from torch.profiler import ProfilerActivity
 from torch.utils.cpp_extension import load_inline
 from cs336_basics.modules import TransformerLM
+from cs336_basics.modules import AdamW
 import torch.cuda.nvtx as nvtx
 from dataclasses import dataclass
 
 __all__ = [
-    "benchmarking",
+    "benchmark",
+    "run_transformer_nvtx",
     "benchmarking_mixed_precision",
     "memory_profiling",
     "mixed_precision_accumulation",
-    "nsys_profile",
 ]
 
 
@@ -35,6 +38,14 @@ class BenchmarkConfig:
     batch_size: int = 4
     seq_len: int = 16
     num_steps: int = 10
+    
+    
+@dataclass
+class NvtxConfig:
+    batch_size: int = 4
+    seq_len: int = 16
+    num_steps: int = 10
+    use_optimizer: bool = True
 
 
 def run_transformer(
@@ -79,6 +90,54 @@ def run_transformer(
     return run
 
 
+def run_transformer_nvtx(
+    model: nn.Module,
+    batch_size: int,
+    seq_len: int,
+    num_steps: int,
+    use_optimizer: bool = False,
+    ) -> Callable:
+    model = model.to(get_device())
+    model.train()
+    
+    vocab_size = model.vocab_size
+    x = torch.randint(
+        low=0,
+        high=vocab_size,
+        size=(batch_size, seq_len),
+        dtype=torch.long,
+        device=get_device()
+    )
+    
+    # Initialize optimizer if requested
+    optimizer = AdamW(model.parameters()) if use_optimizer else None
+    
+    def run():
+        for step in range(num_steps):
+            nvtx.range_push(f"step_{step}")
+
+            # Forward
+            with nvtx.range("forward"):
+                y = model(x).mean()
+
+            # Backward
+            if use_optimizer:
+                optimizer.zero_grad()
+            else:
+                model.zero_grad(set_to_none=True)
+
+            with nvtx.range("backward"):
+                y.backward()
+
+            if use_optimizer:
+                with nvtx.range("optimizer_step"):
+                    optimizer.step()
+            
+            nvtx.range_pop()
+
+    return run
+
+
 def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials: int = 3):
     for _ in range(num_warmups):
         run()
@@ -100,10 +159,6 @@ def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials:
 
 
 def benchmarking():
-    raise NotImplementedError
-
-
-def nsys_profile():
     raise NotImplementedError
 
 
@@ -145,11 +200,44 @@ def sd(data: list[float]) -> float:
     variance = sum((x - mean_val)**2 for x in data) / len(data)
     return variance**0.5
 
+@nvtx.range("scaled dot product attention")
+def annotated_scaled_dot_product_attention(
+    query: Tensor,
+    key: Tensor, 
+    value: Tensor, 
+    mask: Tensor | None = None,
+) -> Tensor:
+    d_k = key.shape[-1]
+    with nvtx.range("computing attention scores"):
+        scores = torch.einsum("... q d, ... k d -> ... q k", query, key) / math.sqrt(d_k)
+    
+    if mask is not None:
+        with nvtx.range("apply musk"):
+            scores = scores.masked_fill(mask == 0, float('-inf'))
+
+    with nvtx.range("computing softmax"):
+        scores = torch.softmax(scores, dim=-1)
+    
+    with nvtx.range("final matmul"):
+        output = scores @ value
+    
+    return output
+
+def main():
+    if torch.cuda.is_available():
+        print("Running the GPU")
+        model_config = TransformerConfig()
+        model = TransformerLM(**model_config.__dict__)
+        nvtx_config = NvtxConfig()
+        run_transformer_nvtx(model, **nvtx_config.__dict__)
+    else:
+        print("Running the CPU")
+        model_config = TransformerConfig()
+        model = TransformerLM(**model_config.__dict__)
+        mark_config = BenchmarkConfig()
+        run_fn = run_transformer(model, **mark_config.__dict__)
+        avg_time, sd_time = benchmark("s", run_fn)
+        print(f"Average step time: {avg_time:.3f} ms, Sd step time: {sd_time:.3f} ms")
 
 if __name__ == "__main__":
-    model_config = TransformerConfig()
-    model = TransformerLM(**model_config.__dict__)
-    mark_config = BenchmarkConfig()
-    run_fn = run_transformer(model, **mark_config.__dict__)
-    avg_time, sd_time = benchmark("s", run_fn)
-    print(f"Average step time: {avg_time:.3f} ms, Sd step time: {sd_time:.3f} ms")
+    main()
