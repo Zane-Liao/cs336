@@ -12,9 +12,11 @@ from cs336_basics.modules import TransformerLM
 from cs336_basics.modules import AdamW
 import torch.cuda.nvtx as nvtx
 from dataclasses import dataclass
+import torch.utils.checkpoint as cp
 
 __all__ = [
     "benchmark",
+    "profile",
     "run_transformer",
     "run_transformer_nvtx",
     "profile_memory"
@@ -24,11 +26,11 @@ __all__ = [
 @dataclass
 class TransformerConfig:
     vocab_size: int = 10000
-    context_length: int = 512
-    num_layers: int = 12
-    d_model: int = 768
-    num_heads: int = 12
-    d_ff: int = 3072
+    context_length: int = 128
+    num_layers: int = 24
+    d_model: int = 1024
+    num_heads: int = 16
+    d_ff: int = 4096
     rope_theta: float = 10000.0
 
 
@@ -42,8 +44,8 @@ class BenchmarkConfig:
 @dataclass
 class NvtxConfig:
     batch_size: int = 4
-    seq_len: int = 16
-    num_steps: int = 10
+    seq_len: int = 4
+    num_steps: int = 5
     use_optimizer: bool = True
 
 
@@ -95,6 +97,7 @@ def run_transformer_nvtx(
     seq_len: int,
     num_steps: int,
     use_optimizer: bool = False,
+    train: bool = True,
     ) -> Callable:
     model = model.to(get_device())
     model.train()
@@ -117,28 +120,31 @@ def run_transformer_nvtx(
             nvtx.range_push(f"step_{step}")
 
             # Forward
-            with torch.autocast(device_type=get_device(), dtype=torch.float16):
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
                 with nvtx.range("forward"):
+                    y = cp.checkpoint(model, x)  # Optional
                     y = model(x).mean()
 
             # Backward
-            if optimizer:
-                optimizer.zero_grad()
-                with nvtx.range("backward"):
-                    scaler.scale(y).backward()
-                with nvtx.range("optimizer_step"):
-                    scaler.step(optimizer)
-                    scaler.update()
-            else:
-                model.zero_grad(set_to_none=True)
-                with nvtx.range("backward"):
-                    y.backward()
-
+            if train:
+                if optimizer:
+                    optimizer.zero_grad()
+                    with nvtx.range("backward"):
+                        scaler.scale(y).backward()
+                    with nvtx.range("optimizer_step"):
+                        scaler.step(optimizer)
+                        scaler.update()
+                else:
+                    model.zero_grad(set_to_none=True)
+                    with nvtx.range("backward"):
+                        y.backward()
+                        
+            torch.cuda.empty_cache()
             nvtx.range_pop()
 
     return run
 
-def profile_memory(run_fn, snapshot_path="memory_snapshot.pickle", max_entries=1_000_000):
+def profile_memory(run_fn, snapshot_path="memory_snapshot.pickle", max_entries=1000_000):
     torch.cuda.memory._record_memory_history(max_entries=max_entries)
     print("[Memory Profiler] Recording started...")
     
@@ -199,6 +205,35 @@ def sd(data: list[float]) -> float:
     variance = sum((x - mean_val)**2 for x in data) / len(data)
     return variance**0.5
 
+def profile(description: str, run: Callable, num_warmups: int = 1, with_stack: bool = False):
+    # Warmup
+    for _ in range(num_warmups):
+        run()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()  # Wait for CUDA threads to finish (important!)
+    # Run the code with the profiler
+    with torch.profiler.profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            # Output stack trace for visualization
+            with_stack=with_stack,
+            # Needed to export stack trace for visualization
+            experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True)) as prof:
+        run()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()  # Wait for CUDA threads to finish (important!)
+    # Print out table
+    table = prof.key_averages().table(sort_by="cuda_time_total",
+                                      max_name_column_width=80,
+                                      row_limit=10)
+    #text(f"## {description}")
+    #text(table, verbatim=True)
+    # Write stack trace visualization
+    if with_stack:
+        text_path = f"var/stacks_{description}.txt"
+        svg_path = f"var/stacks_{description}.svg"
+        prof.export_stacks(text_path, "self_cuda_time_total")
+    return table
+
 @nvtx.range("scaled dot product attention")
 def annotated_scaled_dot_product_attention(
     query: Tensor,
@@ -228,7 +263,8 @@ def main():
         model_config = TransformerConfig()
         model = TransformerLM(**model_config.__dict__)
         nvtx_config = NvtxConfig()
-        profile_memory(run_transformer_nvtx(model, **nvtx_config.__dict__))
+        run_fn_nvtx = run_transformer_nvtx(model, **nvtx_config.__dict__)
+        profile_memory(run_fn_nvtx, "train_snapshot.pickle")
     else:
         print("Running the CPU")
         model_config = TransformerConfig()
