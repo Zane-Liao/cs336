@@ -15,17 +15,16 @@ from dataclasses import dataclass
 
 __all__ = [
     "benchmark",
+    "run_transformer",
     "run_transformer_nvtx",
-    "benchmarking_mixed_precision",
-    "memory_profiling",
-    "mixed_precision_accumulation",
+    "profile_memory"
 ]
 
 
 @dataclass
 class TransformerConfig:
     vocab_size: int = 10000
-    context_length: int = 2048
+    context_length: int = 512
     num_layers: int = 12
     d_model: int = 768
     num_heads: int = 12
@@ -111,31 +110,48 @@ def run_transformer_nvtx(
     
     # Initialize optimizer if requested
     optimizer = AdamW(model.parameters()) if use_optimizer else None
+    scaler = torch.amp.GradScaler("cuda") if use_optimizer else None
     
     def run():
         for step in range(num_steps):
             nvtx.range_push(f"step_{step}")
 
             # Forward
-            with nvtx.range("forward"):
-                y = model(x).mean()
+            with torch.autocast(device_type=get_device(), dtype=torch.float16):
+                with nvtx.range("forward"):
+                    y = model(x).mean()
 
             # Backward
-            if use_optimizer:
+            if optimizer:
                 optimizer.zero_grad()
+                with nvtx.range("backward"):
+                    scaler.scale(y).backward()
+                with nvtx.range("optimizer_step"):
+                    scaler.step(optimizer)
+                    scaler.update()
             else:
                 model.zero_grad(set_to_none=True)
+                with nvtx.range("backward"):
+                    y.backward()
 
-            with nvtx.range("backward"):
-                y.backward()
-
-            if use_optimizer:
-                with nvtx.range("optimizer_step"):
-                    optimizer.step()
-            
             nvtx.range_pop()
 
     return run
+
+def profile_memory(run_fn, snapshot_path="memory_snapshot.pickle", max_entries=1_000_000):
+    torch.cuda.memory._record_memory_history(max_entries=max_entries)
+    print("[Memory Profiler] Recording started...")
+    
+    run_fn()
+    
+    torch.cuda.memory._dump_snapshot(snapshot_path)
+    print(f"[Memory Profiler] Snapshot saved to {snapshot_path}")
+    
+    torch.cuda.memory._record_memory_history(enabled=None)
+    print("[Memory Profiler] Recording stopped.")
+    
+    print("\n[Memory Summary Report]")
+    print(torch.cuda.memory_summary(device=torch.cuda.current_device()))
 
 
 def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials: int = 3):
@@ -156,23 +172,6 @@ def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials:
     mean_time = mean(times)
     sd_time = sd(times)
     return mean_time, sd_time
-
-
-def benchmarking():
-    raise NotImplementedError
-
-
-def mixed_precision_accumulation():
-    raise NotImplementedError
-
-
-def benchmarking_mixed_precision():
-    raise NotImplementedError
-
-
-def memory_profiling():
-    raise NotImplementedError
-
 
 #############################################################################################################
 #############################################################################################################
@@ -229,7 +228,7 @@ def main():
         model_config = TransformerConfig()
         model = TransformerLM(**model_config.__dict__)
         nvtx_config = NvtxConfig()
-        run_transformer_nvtx(model, **nvtx_config.__dict__)
+        profile_memory(run_transformer_nvtx(model, **nvtx_config.__dict__))
     else:
         print("Running the CPU")
         model_config = TransformerConfig()
