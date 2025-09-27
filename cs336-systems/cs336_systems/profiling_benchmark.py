@@ -1,5 +1,3 @@
-import os
-import time
 import math
 import timeit
 from typing import Callable
@@ -7,20 +5,11 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.profiler import ProfilerActivity
-from torch.utils.cpp_extension import load_inline
 from cs336_basics.modules import TransformerLM
 from cs336_basics.modules import AdamW
 import torch.cuda.nvtx as nvtx
 from dataclasses import dataclass
 import torch.utils.checkpoint as cp
-
-__all__ = [
-    "benchmark",
-    "profile",
-    "run_transformer",
-    "run_transformer_nvtx",
-    "profile_memory"
-]
 
 
 @dataclass
@@ -44,7 +33,7 @@ class BenchmarkConfig:
 @dataclass
 class NvtxConfig:
     batch_size: int = 4
-    seq_len: int = 4
+    seq_len: int = 16
     num_steps: int = 5
     use_optimizer: bool = True
 
@@ -72,7 +61,8 @@ def run_transformer(
         for step in range(num_steps):
             # Forward
             start = timeit.default_timer()
-            y = model(x).mean()
+            with torch.autocast(device_type="cuda", dtype=torch.float32):
+                y = model(x).mean()
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             forward_times.append((timeit.default_timer() - start) * 1000)
@@ -160,7 +150,7 @@ def profile_memory(run_fn, snapshot_path="memory_snapshot.pickle", max_entries=1
     print(torch.cuda.memory_summary(device=torch.cuda.current_device()))
 
 
-def benchmark(description: str, run: Callable, num_warmups: int = 1, num_trials: int = 3):
+def benchmark(description: str, run: Callable, num_warmups: int = 5, num_trials: int = 10):
     for _ in range(num_warmups):
         run()
         
@@ -261,7 +251,7 @@ def main():
     if torch.cuda.is_available():
         print("Running the GPU")
         model_config = TransformerConfig()
-        model = TransformerLM(**model_config.__dict__)
+        model = torch.compile(TransformerLM(**model_config.__dict__))
         nvtx_config = NvtxConfig()
         run_fn_nvtx = run_transformer_nvtx(model, **nvtx_config.__dict__)
         profile_memory(run_fn_nvtx, "train_snapshot.pickle")

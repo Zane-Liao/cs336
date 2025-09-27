@@ -1,0 +1,60 @@
+d_model=16, seq_len=256
+Forward: 0.272 ms, Backward: 1.877 ms
+Memory (fwd): 3.69 MB, (bwd): 0.63 MB
+d_model=16, seq_len=1024
+Forward: 0.579 ms, Backward: 2.454 ms
+Memory (fwd): 53.75 MB, (bwd): 12.25 MB
+d_model=16, seq_len=4096
+Forward: 3.288 ms, Backward: 7.994 ms
+Memory (fwd): 839.75 MB, (bwd): 205.00 MB
+d_model=16, seq_len=8192
+Forward: 12.871 ms, Backward: 32.079 ms
+Memory (fwd): 3342.00 MB, (bwd): 826.00 MB
+d_model=16, seq_len=16384
+Forward: 51.251 ms, Backward: 127.814 ms
+Memory (fwd): 13340.00 MB, (bwd): 3316.00 MB
+d_model=32, seq_len=256
+Forward: 0.268 ms, Backward: 1.983 ms
+Memory (fwd): 4.12 MB, (bwd): 0.44 MB
+d_model=32, seq_len=1024
+Forward: 0.628 ms, Backward: 2.463 ms
+Memory (fwd): 56.25 MB, (bwd): 10.75 MB
+d_model=32, seq_len=4096
+Forward: 3.270 ms, Backward: 8.010 ms
+Memory (fwd): 846.00 MB, (bwd): 202.00 MB
+d_model=32, seq_len=8192
+Forward: 12.933 ms, Backward: 32.198 ms
+Memory (fwd): 3356.00 MB, (bwd): 820.00 MB
+d_model=32, seq_len=16384
+Forward: 51.463 ms, Backward: 128.420 ms
+Memory (fwd): 13368.00 MB, (bwd): 3304.00 MB
+d_model=64, seq_len=256
+Forward: 0.361 ms, Backward: 1.376 ms
+Memory (fwd): 5.00 MB, (bwd): 0.07 MB
+d_model=64, seq_len=1024
+Forward: 0.379 ms, Backward: 1.267 ms
+Memory (fwd): 59.75 MB, (bwd): 10.01 MB
+d_model=64, seq_len=4096
+Forward: 3.282 ms, Backward: 8.126 ms
+Memory (fwd): 860.00 MB, (bwd): 196.01 MB
+d_model=64, seq_len=8192
+Forward: 12.997 ms, Backward: 32.390 ms
+Memory (fwd): 3384.00 MB, (bwd): 808.01 MB
+d_model=64, seq_len=16384
+Forward: 51.516 ms, Backward: 128.724 ms
+Memory (fwd): 13424.00 MB, (bwd): 3280.01 MB
+d_model=128, seq_len=256
+Forward: 0.269 ms, Backward: 2.076 ms
+Memory (fwd): 7.50 MB, (bwd): 0.00 MB
+d_model=128, seq_len=1024
+Forward: 0.648 ms, Backward: 2.465 ms
+Memory (fwd): 66.00 MB, (bwd): 7.03 MB
+d_model=128, seq_len=4096
+Forward: 3.341 ms, Backward: 8.300 ms
+Memory (fwd): 888.00 MB, (bwd): 184.03 MB
+d_model=128, seq_len=8192
+Forward: 13.052 ms, Backward: 32.690 ms
+Memory (fwd): 3440.00 MB, (bwd): 784.03 MB
+d_model=128, seq_len=16384
+Forward: 51.633 ms, Backward: 128.985 ms
+Memory (fwd): 13536.00 MB, (bwd): 3232.03 MB
