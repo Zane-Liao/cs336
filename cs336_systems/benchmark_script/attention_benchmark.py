@@ -2,9 +2,6 @@ import timeit
 import itertools
 from typing import Callable
 import torch
-import torch.nn as nn
-from torch import Tensor
-from torch.profiler import ProfilerActivity
 from cs336_basics.modules import MultiHeadSelfAttention
 from cs336_basics.modules import AdamW
 from profiling_benchmark import *

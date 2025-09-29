@@ -9,7 +9,6 @@ import torch.distributed as dist
 import torch.distributed.fsdp
 
 __all__ = [
-    "optimizer_state_sharding",
     "OptimizerStateShare",
 ]
 
