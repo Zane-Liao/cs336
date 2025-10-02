@@ -54,7 +54,7 @@ def train():
     model_args['vocab_size'] = len(tokenizer.vocab)
     print(f"Tokenizer loaded. Vocab size: {model_args['vocab_size']}")
     
-    model = TransformerLM(**model_args).to(device)
+    model = torch.compile(TransformerLM(**model_args).to(device))
     print(f"Model created with {model.get_num_params():,} parameters.")
     
     optimizer = AdamW(model.parameters(), lr=training_args['learning_rate'])
