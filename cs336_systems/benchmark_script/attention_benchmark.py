@@ -4,7 +4,7 @@ from typing import Callable
 import torch
 from cs336_basics.modules import MultiHeadSelfAttention
 from cs336_basics.modules import AdamW
-from profiling_benchmark import *
+from cs336_systems.benchmark_script.profiling_benchmark import *
 
 
 def run_attention(
