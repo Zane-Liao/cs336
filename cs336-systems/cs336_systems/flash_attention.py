@@ -68,7 +68,7 @@ class FlashAttnAutogradFunction(torch.autograd.Function):
                 
                     # Compute tile of pre-softmax attention scores
                     # S_ij = (Q_i @ K_j.transpose(-2, -1)) / torch.sqrt(d)
-                    S_ij = torch.einsum("q d, k d -> q k", Q_i, K_j) / math.sqrt(d)
+                    S_ij = (Q_i @ K_j.T) / math.sqrt(d)
                 
                     if is_causal:
                         row_idx = torch.arange(start_q, end_q, device=Q.device).view(-1, 1)
@@ -100,14 +100,86 @@ class FlashAttnAutogradFunction(torch.autograd.Function):
                 L[b, start_q : end_q] = (m_i + torch.log(l_i)).view(-1)
                 # End for
         
-        ctx.save_for_backward(L, Q, K, V, O)
+        ctx.save_for_backward(Q, K, V, O, L)
         ctx.is_causal = is_causal
 
         return O
 
     @staticmethod
-    def backward(self):
-        raise NotImplementedError
+    def backward(ctx, dO):
+        Q, K, V, O, L = ctx.saved_tensors
+        is_causal = ctx.is_causal
+        B, N, d = Q.shape
+        
+        D = torch.sum(dO * O, dim=-1, keepdim=True)
+        
+        scale = 1.0 / math.sqrt(d)
+        
+        dQ = torch.zeros_like(Q)
+        dK = torch.zeros_like(K)
+        dV = torch.zeros_like(V)
+
+        # Define block_size
+        B_q, B_k = 32, 32
+        
+        # Compute
+        T_q = (N + B_q - 1) // B_q
+        T_k = (N + B_k - 1) // B_k
+        
+        for b in range(B):
+            for j in range(T_k):
+                start_k = j * B_k
+                end_k = min((j + 1) * B_k, N)
+                
+                K_j = K[b, start_k : end_k, :]
+                V_j = V[b, start_k : end_k, :]
+                
+                dK_j = torch.zeros_like(K_j)
+                dV_j = torch.zeros_like(V_j)
+                
+                for i in range(T_q):
+                    start_q = i * B_q
+                    end_q = min((i + 1)  * B_q, N)
+                    
+                    Q_i = Q[b, start_q : end_q, :]
+                    O_i = O[b, start_q : end_q, :]
+                    dO_i = dO[b, start_q : end_q, :]
+                    # dQ_i = Q[b, start_q : end_q, :]
+                    L_i = L[b, start_q : end_q]
+                    D_i = D[b, start_q : end_q, :]
+                    
+                    S_ij = Q_i @ K_j.T * scale
+                    
+                    if is_causal:
+                        row_idx = torch.arange(start_q, end_q, device=Q.device).view(-1, 1)
+                        col_idx = torch.arange(start_k, end_k, device=Q.device).view(1, -1)
+                    
+                        mask = row_idx >= col_idx
+                        S_ij = S_ij.masked_fill(~mask, float('-inf'))
+                    
+                    P_ij = torch.exp(S_ij - L_i.unsqueeze(-1))
+                    
+                    dV_j += P_ij.transpose(0, 1) @ dO_i
+
+                    dP_ij = dO_i @ V_j.transpose(0, 1)
+
+                    # sqrt(d) ==> scale
+                    dS_ij = P_ij * (dP_ij - D_i)
+                    
+                    dQ_i = dS_ij @ K_j
+                    dQ_i = dQ_i * scale
+                    
+                    # sqrt(d)
+                    dK_j += (dS_ij.transpose(0, 1) @ Q_i) * scale
+
+                    dQ[b, start_q : end_q, :] += dQ_i
+                    # End for
+
+                dK[b, start_k : end_k, :] += dK_j
+                dV[b, start_k : end_k, :] += dV_j
+                # End for
+        
+        return dQ, dK, dV, None
 
 
 class TritonFlashAttentionAutogradFunction(torch.autograd.Function):

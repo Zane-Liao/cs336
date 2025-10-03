@@ -60,7 +60,7 @@ class FlashAttention(nn.Module):
             k = self.rope(k, token_positions)
         
         # output = TritonFlashAttentionAutogradFunction.apply(q, k, v)
-        output = FlashAttnAutogradFunction.apply(q, k, v)
+        output = torch.compile(FlashAttnAutogradFunction.apply(q, k, v))
         
         return self.o_proj(rearrange(output, "b h t d -> b t (h d)"))
 
