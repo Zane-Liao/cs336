@@ -1,18 +1,74 @@
 import math
-import numpy as np
-from typing import Callable
+from typing import Optional
+from einops import rearrange
 import torch
 import torch.nn as nn
 from torch import Tensor
 import triton
 import triton.language as tl
-from torch.profiler import ProfilerActivity
-from torch.utils.cpp_extension import load_inline
+from cs336_basics.modules import Linear, RotaryPositionalEmbedding
 
 __all__ = [
+    "FlashAttention",
     "FlashAttnAutogradFunction",
     "TritonFlashAttentionAutogradFunction",
 ]
+
+
+class FlashAttention(nn.Module):
+    def __init__(self,
+                 d_model: int,
+                 num_heads: int,
+                 theta: float | None = None,
+                 max_seq_len: int | None = None,
+                 rope_exist: bool | None = None,
+                 device=None,
+                 dtype=None,
+            ):
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+
+        self.qkv_proj = Linear(d_model, 3 * d_model, **factory_kwargs)
+        self.o_proj = Linear(d_model, d_model, **factory_kwargs)
+        
+        self.rope_exist = rope_exist
+        if self.rope_exist:
+            self.rope = RotaryPositionalEmbedding(
+                theta=theta,
+                d_k=self.d_k,
+                max_seq_len=max_seq_len,
+                device=device
+            )
+        else:
+            self.rope = None
+
+    def forward(self,
+                in_features: Tensor,
+                token_positions: Optional[Tensor] = None,
+               ) -> Tensor:
+        
+        batch_size, seq_len, _ = in_features.shape
+
+        qkv = self.qkv_proj(in_features)
+        q, k, v = qkv.chunk(3, dim=-1)
+        
+        q = rearrange(q, "b t (h d) -> b h t d", h=self.num_heads)
+        k = rearrange(k, "b t (h d) -> b h t d", h=self.num_heads)
+        v = rearrange(v, "b t (h d) -> b h t d", h=self.num_heads)
+
+        if self.rope_exist:
+            if token_positions is None:
+                raise ValueError("token_positions must be provided when use_rope is True.")
+            q = self.rope(q, token_positions)
+            k = self.rope(k, token_positions)
+        
+        # output = TritonFlashAttentionAutogradFunction.apply(q, k, v)
+        output = torch.compile(FlashAttnAutogradFunction.apply(q, k, v))
+        
+        return self.o_proj(rearrange(output, "b h t d -> b t (h d)"))
 
 
 class FlashAttnAutogradFunction(torch.autograd.Function):
@@ -109,75 +165,10 @@ class FlashAttnAutogradFunction(torch.autograd.Function):
     def backward(ctx, dO):
         Q, K, V, O, L = ctx.saved_tensors
         is_causal = ctx.is_causal
-        B, N, d = Q.shape
         
-        D = torch.sum(dO * O, dim=-1, keepdim=True)
-        
-        scale = 1.0 / math.sqrt(d)
-        
-        dQ = torch.zeros_like(Q)
-        dK = torch.zeros_like(K)
-        dV = torch.zeros_like(V)
-
-        # Define block_size
-        B_q, B_k = 32, 32
-        
-        # Compute
-        T_q = (N + B_q - 1) // B_q
-        T_k = (N + B_k - 1) // B_k
-        
-        for b in range(B):
-            for j in range(T_k):
-                start_k = j * B_k
-                end_k = min((j + 1) * B_k, N)
-                
-                K_j = K[b, start_k : end_k, :]
-                V_j = V[b, start_k : end_k, :]
-                
-                dK_j = torch.zeros_like(K_j)
-                dV_j = torch.zeros_like(V_j)
-                
-                for i in range(T_q):
-                    start_q = i * B_q
-                    end_q = min((i + 1)  * B_q, N)
-                    
-                    Q_i = Q[b, start_q : end_q, :]
-                    O_i = O[b, start_q : end_q, :]
-                    dO_i = dO[b, start_q : end_q, :]
-                    # dQ_i = Q[b, start_q : end_q, :]
-                    L_i = L[b, start_q : end_q]
-                    D_i = D[b, start_q : end_q, :]
-                    
-                    S_ij = Q_i @ K_j.T * scale
-                    
-                    if is_causal:
-                        row_idx = torch.arange(start_q, end_q, device=Q.device).view(-1, 1)
-                        col_idx = torch.arange(start_k, end_k, device=Q.device).view(1, -1)
-                    
-                        mask = row_idx >= col_idx
-                        S_ij = S_ij.masked_fill(~mask, float('-inf'))
-                    
-                    P_ij = torch.exp(S_ij - L_i.unsqueeze(-1))
-                    
-                    dV_j += P_ij.transpose(0, 1) @ dO_i
-
-                    dP_ij = dO_i @ V_j.transpose(0, 1)
-
-                    # sqrt(d) ==> scale
-                    dS_ij = P_ij * (dP_ij - D_i)
-                    
-                    dQ_i = dS_ij @ K_j
-                    dQ_i = dQ_i * scale
-                    
-                    # sqrt(d)
-                    dK_j += (dS_ij.transpose(0, 1) @ Q_i) * scale
-
-                    dQ[b, start_q : end_q, :] += dQ_i
-                    # End for
-
-                dK[b, start_k : end_k, :] += dK_j
-                dV[b, start_k : end_k, :] += dV_j
-                # End for
+        dQ, dK, dV = torch_flash_bwd(
+            ctx, dO, Q, K, V, O, L, is_causal=is_causal
+        )
         
         return dQ, dK, dV, None
 
@@ -227,7 +218,89 @@ class TritonFlashAttentionAutogradFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, dO):
-        raise NotImplementedError
+        """OPTIONAL, Impl Triton backward"""
+        Q, K, V, O, L = ctx.saved_tensors
+        is_causal = ctx.is_causal
+        
+        dQ, dK, dV = torch_flash_bwd(
+            ctx, dO, Q, K, V, O, L, is_causal=is_causal
+        )
+        
+        return dQ, dK, dV, None
+
+
+def torch_flash_bwd(ctx, dO, Q, K, V, O, L, is_causal=None):
+    B, N, d = Q.shape
+        
+    D = torch.sum(dO * O, dim=-1, keepdim=True)
+        
+    scale = 1.0 / math.sqrt(d)
+        
+    dQ = torch.zeros_like(Q)
+    dK = torch.zeros_like(K)
+    dV = torch.zeros_like(V)
+
+    # Define block_size
+    B_q, B_k = 32, 32
+        
+    # Compute
+    T_q = (N + B_q - 1) // B_q
+    T_k = (N + B_k - 1) // B_k
+        
+    for b in range(B):
+        for j in range(T_k):
+            start_k = j * B_k
+            end_k = min((j + 1) * B_k, N)
+                
+            K_j = K[b, start_k : end_k, :]
+            V_j = V[b, start_k : end_k, :]
+                
+            dK_j = torch.zeros_like(K_j)
+            dV_j = torch.zeros_like(V_j)
+                
+            for i in range(T_q):
+                start_q = i * B_q
+                end_q = min((i + 1)  * B_q, N)
+                    
+                Q_i = Q[b, start_q : end_q, :]
+                O_i = O[b, start_q : end_q, :]
+                dO_i = dO[b, start_q : end_q, :]
+                # dQ_i = Q[b, start_q : end_q, :]
+                L_i = L[b, start_q : end_q]
+                D_i = D[b, start_q : end_q, :]
+                    
+                S_ij = Q_i @ K_j.T * scale
+                    
+                if is_causal:
+                    row_idx = torch.arange(start_q, end_q, device=Q.device).view(-1, 1)
+                    col_idx = torch.arange(start_k, end_k, device=Q.device).view(1, -1)
+                    
+                    mask = row_idx >= col_idx
+                    S_ij = S_ij.masked_fill(~mask, float('-inf'))
+                    
+                P_ij = torch.exp(S_ij - L_i.unsqueeze(-1))
+                    
+                dV_j += P_ij.transpose(0, 1) @ dO_i
+
+                dP_ij = dO_i @ V_j.transpose(0, 1)
+
+                # sqrt(d) ==> scale
+                dS_ij = P_ij * (dP_ij - D_i)
+                    
+                dQ_i = dS_ij @ K_j
+                dQ_i = dQ_i * scale
+                    
+                # sqrt(d)
+                dK_j += (dS_ij.transpose(0, 1) @ Q_i) * scale
+
+                dQ[b, start_q : end_q, :] += dQ_i
+                # End for
+
+            dK[b, start_k : end_k, :] += dK_j
+            dV[b, start_k : end_k, :] += dV_j
+            # End for
+        
+    return dQ, dK, dV
 
 
 # Triton Implement
