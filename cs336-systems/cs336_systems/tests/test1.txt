@@ -1,0 +1,8 @@
+rank 0 data (before all-reduce): tensor([8, 3, 6])
+rank 0 data (after all-reduce): tensor([24, 17, 11])
+rank 1 data (before all-reduce): tensor([5, 1, 2])
+rank 1 data (after all-reduce): tensor([24, 17, 11])
+rank 3 data (before all-reduce): tensor([8, 7, 1])
+rank 3 data (after all-reduce): tensor([24, 17, 11])
+rank 2 data (before all-reduce): tensor([3, 6, 2])
+rank 2 data (after all-reduce): tensor([24, 17, 11])

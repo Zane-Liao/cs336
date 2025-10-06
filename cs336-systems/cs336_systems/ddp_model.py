@@ -8,6 +8,9 @@ import triton
 import triton.language as tl
 from torch.profiler import ProfilerActivity
 from torch.utils.cpp_extension import load_inline
+import torch.distributed as dist
+import torch.distributed.fsdp
+from torch.nn.parallel import DistributedDataParallel
 
 __all__ = [
     "DDPIndividualParameters",
