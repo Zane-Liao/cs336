@@ -10,6 +10,7 @@ from einops import rearrange
 from dataclasses import dataclass
 from .activation import Softmax, silu, scaled_dot_product_attention
 from jaxtyping import Float, Int
+from cs336_systems.flash_attention import FlashAttention
 
 __all__ = [
     "Embedding",
@@ -343,7 +344,8 @@ class TransformerBlock(Module):
         self.d_ff = d_ff
 
         self.rms_norm1 = RMSNorm(d_model, **factory_kwargs)
-        self.self_attn = MultiHeadSelfAttention(
+        # Test Case: MultiHeadSelfAttention <==> FlashAttention
+        self.self_attn = FlashAttention(
             d_model=d_model,
             num_heads=num_heads,
             theta=theta,

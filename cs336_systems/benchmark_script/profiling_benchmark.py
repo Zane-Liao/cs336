@@ -195,6 +195,7 @@ def sd(data: list[float]) -> float:
     variance = sum((x - mean_val)**2 for x in data) / len(data)
     return variance**0.5
 
+# Percy
 def profile(description: str, run: Callable, num_warmups: int = 1, with_stack: bool = False):
     # Warmup
     for _ in range(num_warmups):
