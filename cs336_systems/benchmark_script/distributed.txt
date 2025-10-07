@@ -1,0 +1,132 @@
+
+--- Running | size=1.0MB | world_size=2 ---
+
+[all_reduce] Rank 0: all_reduce(world_size=2, num_elements=262144) took 859.98us
+[all_reduce] Rank 1: all_reduce(world_size=2, num_elements=262144) took 917.91us
+[all_reduce] Rank 0: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 1 GB/s
+
+--- Running | size=1.0MB | world_size=4 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=4, num_elements=262144) took 5.24ms
+[all_reduce] Rank 0: all_reduce(world_size=4, num_elements=262144) took 5.28ms
+[all_reduce] Rank 2: all_reduce(world_size=4, num_elements=262144) took 5.31ms
+[all_reduce] Rank 3: all_reduce(world_size=4, num_elements=262144) took 5.24ms
+[all_reduce] Rank 1: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 0 GB/s
+
+--- Running | size=1.0MB | world_size=6 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=6, num_elements=262144) took 5.48ms
+[all_reduce] Rank 2: all_reduce(world_size=6, num_elements=262144) took 5.34ms
+[all_reduce] Rank 0: all_reduce(world_size=6, num_elements=262144) took 5.22ms
+[all_reduce] Rank 5: all_reduce(world_size=6, num_elements=262144) took 5.15ms
+[all_reduce] Rank 3: all_reduce(world_size=6, num_elements=262144) took 5.26ms
+[all_reduce] Rank 4: all_reduce(world_size=6, num_elements=262144) took 5.05ms
+[all_reduce] Rank 0: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 5: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 4: all_reduce measured bandwidth = 0 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 0 GB/s
+
+--- Running | size=10.5MB | world_size=2 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=2, num_elements=2621440) took 5.04ms
+[all_reduce] Rank 0: all_reduce(world_size=2, num_elements=2621440) took 5.06ms
+[all_reduce] Rank 1: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 2 GB/s
+
+--- Running | size=10.5MB | world_size=4 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=4, num_elements=2621440) took 9.82ms
+[all_reduce] Rank 2: all_reduce(world_size=4, num_elements=2621440) took 9.89ms
+[all_reduce] Rank 0: all_reduce(world_size=4, num_elements=2621440) took 9.77ms
+[all_reduce] Rank 3: all_reduce(world_size=4, num_elements=2621440) took 9.65ms
+[all_reduce] Rank 0: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 1 GB/s
+
+--- Running | size=10.5MB | world_size=6 ---
+
+[all_reduce] Rank 2: all_reduce(world_size=6, num_elements=2621440) took 11.33ms
+[all_reduce] Rank 1: all_reduce(world_size=6, num_elements=2621440) took 11.18ms
+[all_reduce] Rank 0: all_reduce(world_size=6, num_elements=2621440) took 11.50ms
+[all_reduce] Rank 3: all_reduce(world_size=6, num_elements=2621440) took 12.08ms
+[all_reduce] Rank 5: all_reduce(world_size=6, num_elements=2621440) took 11.77ms
+[all_reduce] Rank 4: all_reduce(world_size=6, num_elements=2621440) took 11.82ms
+[all_reduce] Rank 4: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 5: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 1 GB/s
+
+--- Running | size=104.9MB | world_size=2 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=2, num_elements=26214400) took 27.63ms
+[all_reduce] Rank 0: all_reduce(world_size=2, num_elements=26214400) took 27.63ms
+[all_reduce] Rank 1: all_reduce measured bandwidth = 4 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 4 GB/s
+
+--- Running | size=104.9MB | world_size=4 ---
+
+[all_reduce] Rank 3: all_reduce(world_size=4, num_elements=26214400) took 73.37ms
+[all_reduce] Rank 2: all_reduce(world_size=4, num_elements=26214400) took 73.30ms
+[all_reduce] Rank 1: all_reduce(world_size=4, num_elements=26214400) took 73.26ms
+[all_reduce] Rank 0: all_reduce(world_size=4, num_elements=26214400) took 73.25ms
+[all_reduce] Rank 2: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 2 GB/s
+
+--- Running | size=104.9MB | world_size=6 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=6, num_elements=26214400) took 128.06ms
+[all_reduce] Rank 2: all_reduce(world_size=6, num_elements=26214400) took 127.72ms
+[all_reduce] Rank 4: all_reduce(world_size=6, num_elements=26214400) took 128.17ms
+[all_reduce] Rank 3: all_reduce(world_size=6, num_elements=26214400) took 127.47ms
+[all_reduce] Rank 0: all_reduce(world_size=6, num_elements=26214400) took 128.93ms
+[all_reduce] Rank 5: all_reduce(world_size=6, num_elements=26214400) took 128.76ms
+[all_reduce] Rank 0: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 4: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 5: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 1 GB/s
+
+--- Running | size=1073.7MB | world_size=2 ---
+
+[all_reduce] Rank 1: all_reduce(world_size=2, num_elements=268435456) took 312.63ms
+[all_reduce] Rank 0: all_reduce(world_size=2, num_elements=268435456) took 312.63ms
+[all_reduce] Rank 1: all_reduce measured bandwidth = 3 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 3 GB/s
+
+--- Running | size=1073.7MB | world_size=4 ---
+
+[all_reduce] Rank 2: all_reduce(world_size=4, num_elements=268435456) took 700.11ms
+[all_reduce] Rank 3: all_reduce(world_size=4, num_elements=268435456) took 700.31ms
+[all_reduce] Rank 1: all_reduce(world_size=4, num_elements=268435456) took 700.34ms
+[all_reduce] Rank 0: all_reduce(world_size=4, num_elements=268435456) took 700.58ms
+[all_reduce] Rank 0: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 2 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 2 GB/s
+
+--- Running | size=1073.7MB | world_size=6 ---
+
+[all_reduce] Rank 3: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 4: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 2: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 1: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 5: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 0: all_reduce(world_size=6, num_elements=268435456) took 1.31s
+[all_reduce] Rank 3: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 5: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 1: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 0: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 2: all_reduce measured bandwidth = 1 GB/s
+[all_reduce] Rank 4: all_reduce measured bandwidth = 1 GB/s

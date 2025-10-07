@@ -9,16 +9,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 import torch.distributed.fsdp
-from profiling_benchmark import *
 import torch.multiprocessing as mp
+import pandas as pd
+import matplotlib.pyplot as plt 
 
 
-def distributed_single():
-    raise NotImplementedError
-
-
-def main():
-    raise NotImplementedError
+def benchmarking_main():
+    # "gloo" ==> cpu "nccl" ==> gpu
+    # 1MB 10MB 100MB 1GB 
+    data_sizes = [1 << 20, 10 << 20, 100 << 20, 1 << 30]
+    world_size = [2, 4, 6]
+    
+    # results = []
+    
+    for size in data_sizes:
+        num_elements = size  // 4
+        for ws in world_size:
+            print(f"\n--- Running | size={size/1e6:.1f}MB | world_size={ws} ---\n")
+            spawn(all_reduce, ws, num_elements=num_elements)
+            # results.append({
+            #     "device": get_device(),
+            #     "data_MB": size / (1 << 20),
+            #     "world_size": ws,
+            # })
 
 
 # Percy
@@ -102,6 +115,11 @@ def setup(rank: int, world_size: int):
 def cleanup():
     torch.distributed.destroy_process_group()
 
+def get_device(index: int = 0) -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device(f"cuda:{index}")
+    else:
+        return torch.device("cpu")
 
 class DisableDistributed:
     """Context manager that temporarily disables distributed functions (replaces with no-ops)"""
@@ -148,4 +166,4 @@ def render_duration(duration: float) -> str:
     return f"{duration:.2f}s"
 
 if __name__ == "__main__":
-    main()
+    benchmarking_main()
