@@ -1,6 +1,7 @@
 """
 ----
-train_model.py
+2025.7
+train.py
 
 Warning: This script is not applicable to Windows. 
 If you need to use it, please modify it yourself.
@@ -13,21 +14,33 @@ subprocess Create shell process
 This file may be a redundant file, but if you need to run all at once
 without step-by-step, you can try it.
 Warning: Unpredictable errors may occur, so use with caution.
+
+2025.10
+OS: Ubuntu Linux
+GPU: NVIDIA 4090 PCIE X 4
+device: GPU0 GPU1 GPU2 GPU3
+Shell: bash
+Improvement: torch.compile() FlashAttention DDP
 ----
 """
 import os
 import sys
+import json
 import time
+import glob
+import yaml
+from data import load
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.nn as nn
-import yaml
-from .data import get_batch, load, save
-from .tokenizer import Tokenizer, PAT_GPT2, PAT_SPECIAL_TOKEN
+from data import get_batch, load, save
+from tokenizer import Tokenizer, train_bpe, PAT_GPT2, PAT_SPECIAL_TOKEN
 from modules.layers import TransformerLM
 from modules.loss import CrossEntropyLoss
 from modules.activation import GLU, Softmax
 from modules.optimizer import SGD, AdamW, compute_lr, gradient_cliping
+from torch.utils.tensorboard import SummaryWriter
 
 def train():
     # 1. Load Config
@@ -88,50 +101,94 @@ def train():
         return valid_loss / eval_iters  
 
     # 6. Begin Training Loop
+    ckpts = glob.glob(os.path.join(data_args['checkpoint_dir'], "model_iter_*.pt"))
+    if ckpts:
+        latest_ckpt = max(ckpts, key=os.path.getctime)
+        start_iter = load(latest_ckpt, model, optimizer) + 1
+    else:
+        print("From Scratch Training")
+    start_iter = 0
+    
+    writer = SummaryWriter(log_dir="runs/llm_run")
+
+    train_losses = []
+    val_losses = []
+    iterations = []
+    eval_iterations = []
+
     print("--- Starting Training Loop ---")
     t0 = time.time()
+
     for iter_num in range(start_iter, training_args['max_iters']):
-        
+
         lr = compute_lr(
-            iter_num, 
+            iter_num,
             training_args['learning_rate'],
             training_args['min_lr'],
             training_args['warmup_steps'],
             training_args['lr_decay_steps']
         )
-        
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-        
-        inputs, targets = get_batch(train_data, training_args['batch_size'], model_args['context_length'], device)
-        
+    
+        for pg in optimizer.param_groups:
+            pg['lr'] = lr
+
+
+        inputs, targets = get_batch(
+            train_data,
+            training_args['batch_size'],
+            model_args['context_length'],
+            device
+        )
+    
         logits = model(inputs)
-        loss = loss_init(logits.view(-1, model_args['vocab_size']), targets.view(-1))
-        
+
+        loss = loss_init(
+            logits.view(-1, model_args['vocab_size']),
+            targets.view(-1)
+        )
+
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
-        
-        gradient_cliping(model.parameters(), training_args['gradient_clip_val'])
-        
+        total_norm = gradient_cliping(
+            model.parameters(),
+            training_args['gradient_clip_val']
+        )
         optimizer.step()
-        
+
+        train_losses.append(loss.item())
+        iterations.append(iter_num)
+
+        writer.add_scalar("Loss/train", loss.item(), iter_num)
+        writer.add_scalar("LR", lr, iter_num)
+        writer.add_scalar("GradNorm/total", total_norm, iter_num)
 
         if iter_num % 10 == 0:
             t1 = time.time()
-            dt = t1 - t0
+            print(
+                f"Iter {iter_num}/{training_args['max_iters']}, "
+                f"Train Loss: {loss.item():.4f}, "
+                f"LR: {lr:.6f}, "
+                f"GradNorm: {total_norm:.4f}, "
+                f"Time: {(t1-t0)*1000:.1f}ms"
+            )
             t0 = t1
-            print(f"Iter {iter_num}/{training_args['max_iters']}, Train Loss: {loss.item():.4f}, LR: {lr:.6f}, Time: {dt*1000:.2f}ms")
 
         if iter_num > 0 and iter_num % training_args['eval_interval'] == 0:
             val_loss = evaluate()
+            val_losses.append(val_loss)
+            eval_iterations.append(iter_num)
+
+            writer.add_scalar("Loss/val", val_loss, iter_num)
+
             print(f"--- Eval at iter {iter_num}: Val Loss: {val_loss:.4f} ---")
-            
-            checkpoint_path = os.path.join(data_args['checkpoint_dir'], f"model_iter_{iter_num}.pt")
+            checkpoint_path = os.path.join(
+                data_args['checkpoint_dir'],
+                f"model_iter_{iter_num}.pt"
+            )
             save(model, optimizer, iter_num, checkpoint_path)
 
-    print("--- Training Finished! ---")
-    final_checkpoint_path = os.path.join(data_args['checkpoint_dir'], "model_final.pt")
-    save(model, optimizer, training_args['max_iters'], final_checkpoint_path)
+    writer.close()
+    print("Training complete! Logs written to runs/llm_run")
             
 if __name__ == '__main__':
     train()

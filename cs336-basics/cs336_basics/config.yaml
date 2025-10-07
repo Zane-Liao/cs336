@@ -8,7 +8,7 @@ model_args:
   rope_theta: 10000.0
 
 training_args:
-  device: "cpu" # Train device, If you have h100, Please Change to "cuda"
+  device: "cuda" # Train device, If you have GPU, Please Change to "cuda" else "cpu"
   batch_size: 64
   num_epochs: 5
   learning_rate: 0.0003
