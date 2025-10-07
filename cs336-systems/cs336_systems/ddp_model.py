@@ -36,9 +36,7 @@ class DDPIndividualParameters(nn.Module):
         self._params: List[nn.Parameter] = [p for _, p in module.named_parameters()]
         
         self._buffers = [b for _, b in module.named_buffers()]
-        
-        self._handles: List[dist.Work] = []
-        
+
         self._hook_handles = []
                 
         self._boardcast_parameters_and_buffers()
@@ -47,54 +45,46 @@ class DDPIndividualParameters(nn.Module):
         
     def _boardcast_parameters_and_buffers(self):
         seen_params: Set[int] = set()
-        for p in self._params:
-            if id(p) in seen_params:
-                continue
-            dist.broadcast(p.data, src=0)
-            seen_params.add(id(p))
+        with torch.no_grad():
+            for p in self._params:
+                if id(p) in seen_params:
+                    continue
+                dist.broadcast(p.data, src=0)
+                seen_params.add(id(p))
         
-        for b in self._buffers:
-            try:
-                dist.broadcast(b.data, src=0)
-            except Exception:
-                pass
+            for b in self._buffers:
+                try:
+                    dist.broadcast(b.data, src=0)
+                except Exception:
+                    pass
     
     def _register_hooks(self):
         seen_params: Set[int] = set()
-        for p in self._params or id(p) in seen_params:
-            if not p.requires_grad:
+        for p in self._params:
+            if id(p) in seen_params or not p.requires_grad:
                 continue
             seen_params.add(id(p))
             
             def make_hook(param):
                 def hook(grad):
                     if grad is None:
-                        return None
+                        return
                     
-                    handle = dist.all_reduce(grad, op=dist.ReduceOp.SUM, async_op=True)
+                    dist.all_reduce(grad, op=dist.ReduceOp.SUM)
                     
-                    self._handles.append(handle)
+                    grad.div_(self.world_size)
                     
                     return grad
                 return hook
             
-            h = p.register_hook(make_hook(p))
-            self._hook_handles.append(h)
+            handle = p.register_hook(make_hook(p))
+            self._hook_handles.append(handle)
     
     def forward(self, *inputs, **kwargs):
         return self.module(*inputs, **kwargs)
     
     def finish_gradient_synchronization(self):
-        for h in self._handles:
-            h.wait()
-        
-        self._handles = []
-        
-        if self.world_size > 1:
-            for p in self._params:
-                if not p.requires_grad:
-                    if p.grad is not None:
-                        p.grad.div_(self.world_size)
+        raise NotImplementedError
 
 
 class BucketDDPIndividualParameters(nn.Module):
