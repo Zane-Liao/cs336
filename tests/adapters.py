@@ -5,7 +5,7 @@ from typing import Type
 import torch
 
 # from cs336_systems.flash_attention import FlashAttnAutogradFunction, TritonFlashAttentionAutogradFunction
-from cs336_systems.ddp_model import DDPIndividualParameters
+from cs336_systems.ddp_model import DDPIndividualParameters, BucketDDPIndividualParameters
 
 
 def get_flashattention_autograd_function_pytorch() -> Type:
@@ -91,7 +91,7 @@ def get_ddp_bucketed(module: torch.nn.Module, bucket_size_mb: float) -> torch.nn
     Returns:
         Instance of a DDP class.
     """
-    raise NotImplementedError
+    return BucketDDPIndividualParameters(module, bucket_size_mb)
 
 
 def ddp_bucketed_on_after_backward(ddp_model: torch.nn.Module, optimizer: torch.optim.Optimizer):

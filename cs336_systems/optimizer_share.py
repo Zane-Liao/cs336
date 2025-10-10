@@ -22,7 +22,3 @@ class OptimizerStateShare(Optimizer):
     
     def add_param_group(self, param_group: dict[str, Any]):
         raise NotImplementedError
-
-
-def optimizer_state_sharding():
-    raise NotImplementedError
