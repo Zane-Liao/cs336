@@ -1,19 +1,7 @@
-import os
-import sys
-import math
-import time
-import numpy as np
-from inspect import isfunction
-from typing import List, Callable, Set, Dict, Any
+from typing import List, Set, Dict, Any
 import torch
 import torch.nn as nn
-import torch.distributed.fsdp
-import torch.nn.functional as F
 import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.profiler import ProfilerActivity
-from torch.utils.cpp_extension import load_inline
-from torch.nn.parallel import DistributedDataParallel
 
 __all__ = [
     "DDPIndividualParameters",
@@ -86,7 +74,8 @@ class DDPIndividualParameters(nn.Module):
     def finish_gradient_synchronization(self):
         raise NotImplementedError
 
-# NOT IMPl bucket
+
+# ERROR🌚🌚🌚 BucketDDPIndividualParameters Impl
 class BucketDDPIndividualParameters(nn.Module):
     def __init__(self, module: torch.nn.Module, bucket_size_mb: float = 25.0):
         super().__init__()
@@ -132,13 +121,13 @@ class BucketDDPIndividualParameters(nn.Module):
                 except Exception:
                     pass
     
-    def _create_bucket(self):
-        raise NotImplementedError
-    
-    def _update_bucket(self):
+    def _create_buckets(self):
         raise NotImplementedError
     
     def _build_buckets(self):
+        raise NotImplementedError
+    
+    def _all_reduce_bucket(self):
         raise NotImplementedError
     
     def _register_hooks(self):

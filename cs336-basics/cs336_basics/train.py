@@ -14,13 +14,6 @@ subprocess Create shell process
 This file may be a redundant file, but if you need to run all at once
 without step-by-step, you can try it.
 Warning: Unpredictable errors may occur, so use with caution.
-
-2025.10
-OS: Ubuntu Linux
-GPU: NVIDIA 4090 PCIE X 4
-device: GPU0 GPU1 GPU2 GPU3
-Shell: bash
-Improvement: torch.compile() FlashAttention DDP
 ----
 """
 import os
