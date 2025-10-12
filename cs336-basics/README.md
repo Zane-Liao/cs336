@@ -33,7 +33,7 @@ I started using traditional plots and later switched to TensorBoard to monitor l
 - Time: About 90mins
 ##### HyperParameters:
 Model_HyperParameters Same as recommended in as1
-Since I didn’t have much training experience before, the final loss fluctuated between 3.8~3.6, with a mean of about 3.7. I learned that loss is very important for LLM. Before I reduced the owt_train dataset to below 3.3, I almost never used distributed data parallelism for training.
+Since I didn’t have much training experience before, the final loss fluctuated between 3.8~3.6, with a mean of about 3.7. I learned that loss is very important for LLM. Before I reduced the owt_train dataset to below 3.3, I will not use distributed parallel training.
 Train_HyperParameters()
 1. device: "cuda"
 2. batch_size: 64 # 0~45000 ==> 64 45000~50000 ==> 128
