@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 **The Transformer architecture We need to implement**
 ![Decoder](photos/Transformer.png)
 
@@ -25,3 +24,29 @@ I started using traditional plots and later switched to TensorBoard to monitor l
 
 ![train](photos/train.png) ![valid](photos/valid.png)
 ![GradNorm_total](photos/GradNorm_total.svg) ![LR](photos/LR.svg) ![Loss_train](photos/Loss_train.svg)
+
+
+#### 2025.10.11
+- Use Single RTX 4090
+- torch(FlashAttention)
+- DataSets: owt_train owt_valid
+- Time: About 90mins
+##### HyperParameters:
+Model_HyperParameters Same as recommended in as1
+Since I didn’t have much training experience before, the final loss fluctuated between 3.3 and 3.6, with a mean of about 3.7. I learned that loss is very important for LLM. Before I reduced the owt_train dataset to below 3.3, I almost never used distributed data parallelism for training.
+Train_HyperParameters()
+1. device: "cuda"
+2. batch_size: 64 # 0~45000 ==> 64 45000~50000 ==> 128
+3. num_epochs: 5
+4. learning_rate: 0.0003 # 0~35000 ==> 0.0003 35000~40000 ==> 0.0005
+5. max_iters: 50000
+6. eval_interval: 200
+7. warmup_steps: 500 # 0~35000 ==> 500 35000~40000 ==> 200
+8. lr_decay_steps: 5000
+9. min_lr: 3.0e-6 # 0~35000 ==> 3.0e-6 35000~40000 ==> 5.0e-5
+10. gradient_clip_val: 1.0
+
+![train1](photos/train1.png)
+![valid1](photos/valid1.png)
+![LR1](photos/lr1.png)
+
