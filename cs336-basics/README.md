@@ -23,7 +23,6 @@ I started using traditional plots and later switched to TensorBoard to monitor l
 
 
 ![train](photos/train.png) ![valid](photos/valid.png)
-![GradNorm_total](photos/GradNorm_total.svg) ![LR](photos/LR.svg) ![Loss_train](photos/Loss_train.svg)
 
 
 #### 2025.10.11
