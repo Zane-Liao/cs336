@@ -28,6 +28,7 @@ I started using traditional plots and later switched to TensorBoard to monitor l
 
 #### 2025.10.11
 - Use Single RTX 4090
+- torch.compile()
 - torch(FlashAttention)
 - DataSets: owt_train owt_valid
 - Time: About 90mins
