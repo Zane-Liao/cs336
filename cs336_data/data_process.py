@@ -20,6 +20,16 @@ from io import BytesIO
 import requests
 import os
 import shutil
+import regex as re
+
+EMAIL = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
+PHONE = re.compile(r"(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}")
+IPV4 = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}"
+                  r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\b")
+
+R_EMAIL = "|||EMAIL_ADDRESS|||"
+R_PHONE = "|||PHONE_NUMBER|||"
+R_IPV4 = "|||IP_ADDRESS|||"
 
 
 # Problem (extract_text): 3 points
@@ -53,6 +63,7 @@ def language_ident(unicode_str: str) -> tuple[Any, float]:
     model = fasttext.load_model(model_path)
     predicted, scores = [], []
     
+    # Split Line
     lines = [line.strip() for line in unicode_str.split("\n") if line.strip()]
     
     for line in lines:
@@ -77,8 +88,10 @@ def email_trans_string(email_str: str) -> tuple[str, int]:
         TEST:
             Implement the adapter [run_mask_emails] and make sure it passes all tests in
             uv run pytest -k test_mask_emails
-    """
-    raise NotImplementedError
+    """    
+    masked_text, r_num = EMAIL.subn(R_EMAIL, email_str)
+    
+    return (masked_text, r_num)
 
 
 def phone_trans_string(phone_str: str) -> tuple[str, int]:
@@ -87,7 +100,9 @@ def phone_trans_string(phone_str: str) -> tuple[str, int]:
             Implement the adapter [run_mask_phone_numbers] and make sure it passes
             uv run pytest -k test_mask_phones
     """
-    raise NotImplementedError
+    masked_text, r_num = PHONE.subn(R_PHONE, phone_str)
+
+    return (masked_text, r_num)
 
 
 def ipv4_trans_string(ipv4_str: str) -> tuple[str, int]:
@@ -96,7 +111,9 @@ def ipv4_trans_string(ipv4_str: str) -> tuple[str, int]:
             Implement the adapter [run_mask_ips] and make sure it passes
             uv run pytest -k test_mask_ips
     """
-    raise NotImplementedError
+    masked_text, r_num = IPV4.subn(R_IPV4, ipv4_str)
+    
+    return (masked_text, r_num)
 
 
 # Problem (harmful_content): 6 points
@@ -106,7 +123,24 @@ def check_nsfw(text: str) -> tuple[Any, float]:
             Implement the adapter [run_classify_nsfw] and make sure it passes
             uv run pytest -k test_classify_nsfw
     """
-    raise NotImplementedError
+    # jigsaw_fasttext_bigrams_nsfw_final.bin rename nsfw.bin
+    model_path = "var/nsfw.bin"
+    model = fasttext.load_model(model_path)
+    predicted, scores = [], []
+    
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    
+    for line in lines:
+        labels, score = model.predict(line)
+        predicted.append(labels[0])
+        scores.append(score[0])
+    
+    common_labels = Counter(predicted).most_common(1)[0][0]
+    mean_score = float(np.mean(score))
+    
+    nsfw_language = common_labels.replace('__label__', '')
+    
+    return (nsfw_language, mean_score)
 
 
 def check_oxic_speech(text: str) -> tuple[Any, float]:
@@ -115,8 +149,25 @@ def check_oxic_speech(text: str) -> tuple[Any, float]:
             Implement the adapter [run_classify_toxic_speech] and make sure it passes
             uv run pytest -k test_classify_toxic_speech
     """
-    raise NotImplementedError
-
+    # jigsaw_fasttext_bigrams_hatespeech_final.bin rename hatespeech.bin
+    model_path = "var/hatespeech.bin"
+    model = fasttext.load_model(model_path)
+    predicted, scores = [], []
+    
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    
+    for line in lines:
+        labels, score = model.predict(line)
+        predicted.append(labels[0])
+        scores.append(score[0])
+    
+    common_labels = Counter(predicted).most_common(1)[0][0]
+    mean_score = float(np.mean(score))
+    
+    hate_speech_language = common_labels.replace('__label__', '')
+    
+    return (hate_speech_language, mean_score)
+    
 
 # Problem (gopher_quality_filters): 3 points
 def gopher_filter(text: str) -> tuple[Any, float]:
