@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import os
 from typing import Any
-
+from cs336_data.data_process import *
 
 
 def run_extract_text_from_html_bytes(html_bytes: bytes) -> str | None:
-    raise NotImplementedError
+    return html_trans_text(html_bytes=html_bytes)
 
 
 def run_identify_language(text: str) -> tuple[Any, float]:
-    raise NotImplementedError
+    return language_ident(text)
 
 
 def run_mask_emails(text: str) -> tuple[str, int]:

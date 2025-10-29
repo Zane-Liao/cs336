@@ -8,11 +8,15 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import softmax
 import numpy as np
-import kenlm
 import fasttext
 import itertools
 import mmh3
+import kenlm
 from bitarray import bitarray
+from io import BytesIO
+import requests
+import os
+import shutil
 
 
 def compute(content: str, model: kenlm.Model):
