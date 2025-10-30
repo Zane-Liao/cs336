@@ -31,6 +31,12 @@ R_EMAIL = "|||EMAIL_ADDRESS|||"
 R_PHONE = "|||PHONE_NUMBER|||"
 R_IPV4 = "|||IP_ADDRESS|||"
 
+MIN_LEN = 50
+MAX_LEN = 100_000
+MIN_MEAN_LEN = 3
+MAX_MEAN_LEN = 10
+LINE_O = 0.3
+LINE_L = 0.8
 
 # Problem (extract_text): 3 points
 def html_trans_text(html_bytes: bytes) -> str | None:
@@ -170,29 +176,68 @@ def check_oxic_speech(text: str) -> tuple[Any, float]:
     
 
 # Problem (gopher_quality_filters): 3 points
-def gopher_filter(text: str) -> tuple[Any, float]:
+def gopher_filter(text: str) -> bool:
     """
         TEST:
             Implement the adapter [run_gopher_quality_filter]. Then,
             make sure your filters pass the tests in
             uv run pytest -k test_gopher
     """
-    raise NotImplementedError
+    if not text or not text.strip():
+        return False
+    
+    words = word_tokenize(text)
+    n_words = len(words)
+    
+    if n_words < MIN_LEN or n_words > MAX_LEN:
+        return False
+    
+    mean_len = sum(len(n) for n in words) / n_words
+    if mean_len < MIN_MEAN_LEN or mean_len > MAX_MEAN_LEN:
+        return False
+
+    lines = text.splitlines()
+    if lines:
+        e_split = sum(1 for line in lines if line.strip().endswith("..."))
+        if (e_split / len(lines)) > LINE_O:
+            return False
+        
+    alphabetic_words = sum(1 for w in words if any(ch.isalpha() for ch in w))
+    if alphabetic_words / n_words < LINE_L:
+        return False
+    
+    return True    
 
 
 # Problem (quality_classifier): 15 points
-def quality_classifier(text: str) -> bool:
+def quality_classifier(text: str) -> tuple[Any, float]:
     """
         TEST:
             Implement the adapter [run_classify_quality]. As a sanity check, make sure
             it correctly classifies the two examples we provide by running
             uv run pytest -k test_classify_quality
     """
-    raise NotImplementedError
+    quality_model = fasttext.load_model("quality_classifier.bin")
+    
+    labels, scores = quality_model.predict(text.replace("\n", " "))
+    
+    label = labels[0].replace("__label__", "")
+    score = float(scores[0])
+    
+    return (label, score)
 
 
-def classifier_label():
-    raise NotImplementedError
+def model_classifier_label():
+    model = fasttext.train_supervised(
+        input="train.txt",
+        lr=0.1,
+        epoch=10,
+        wordNgrams=2,
+        dim=100,
+        loss="softamx",
+    )
+    
+    model.save_model("quality_classifier.bin")
 
 
 # Problem (exact_deduplication): 3 points

@@ -22,8 +22,49 @@ def warc_text(max_print: int):
                     print(text[200:])
 
 
+def extract_text_from_warc(warc_path: str):
+    texts = []
+    with FileStream(warc_path) as stream:
+        for record in ArchiveIterator(stream):
+            if record.record_type == "response":
+                try:
+                    html = record.reader.read()
+                    if html:
+                        text = extract_plain_text(html)
+                        texts.append(text.replace("\n", " "))
+                except Exception as e:
+                    print(f"[WARN] {e}")
+    print(f"[INFO] Extracted {len(texts)} texts from {warc_path}")
+    return texts
+
+def inspect_warc(path):
+    from collections import Counter
+    counts = Counter()
+    with FileStream(path) as stream:
+        for record in ArchiveIterator(stream):
+            counts[record.record_type] += 1
+    print(counts)
+
+
+def file_open_text():
+    pos_texts = extract_text_from_warc("../var/positive_samples.warc.gz")
+    neg_texts = extract_text_from_warc("../var/negative_samples.warc.gz")
+    
+    pos_texts = [t for t in pos_texts if gopher_filter(t)]
+    neg_texts = [t for t in neg_texts if gopher_filter(t)]
+    
+    with open("train.txt", "w") as f:
+        for text in pos_texts:
+            f.write(f"__label__high {text}\n")
+        for text in neg_texts:
+            f.write(f"__label__low {text}\n")
+
+
 def all_main():
-    warc_text(max_print=5)
+    # warc_text(max_print=5)
+    file_open_text()
+    inspect_warc("../var/positive_samples.warc.gz")
+    inspect_warc("../var/negative_samples.warc.gz")
 
 
 if __name__ == '__main__':
