@@ -1,26 +1,20 @@
 import os
-import math
-import torch
-import torch.nn as nn
-from torch.nn.functional import softmax
-import numpy as np
 # import kenlm
-import fasttext
-import itertools
 import mmh3
-import resiliparse
+import hashlib
+import fasttext
 # import bitarray
-from dataclasses import dataclass
-from nltk import word_tokenize
-from typing import Any
-from resiliparse.extract.html2text import extract_plain_text
-from resiliparse.parse.encoding import detect_encoding
-from collections import Counter
-from io import BytesIO
 import requests
-import os
 import shutil
 import regex as re
+from io import BytesIO
+from typing import Any
+import numpy as np
+from nltk import word_tokenize
+from dataclasses import dataclass
+from collections import Counter, defaultdict
+from resiliparse.extract.html2text import extract_plain_text
+from resiliparse.parse.encoding import detect_encoding
 
 EMAIL = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
 PHONE = re.compile(r"(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}")
@@ -249,7 +243,26 @@ def line_deduplication(
             Implement the adapter [run_exact_line_deduplication] and make sure it passes
             uv run pytest -k test_exact_line_deduplication
     """
-    raise NotImplementedError
+    line_count = defaultdict(int)
+    
+    for path in input_files:
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.rstrip()
+                h = hashlib.sha512(line.encode('utf-8')).hexdigest()
+                line_count[h] += 1
+    
+    os.makedirs(output_directory, exist_ok=True)
+    
+    for path in input_files:
+        rename = os.path.basename(path)
+        output_path = os.path.join(output_directory, rename)
+        with open(path, 'r', encoding='utf-8') as fr, open(output_path, 'w', encoding='utf-8') as fw:
+            for line in fr:
+                line = line.rstrip()
+                h = hashlib.sha512(line.encode('utf-8')).hexdigest()
+                if line_count[h] == 1:
+                    fw.write(line+'\n')
 
 
 # Problem (minhash_deduplication): 8 points
@@ -282,3 +295,16 @@ def download_file(url: str, filename: str):
         with open(filename, "wb") as f:
             shutil.copyfileobj(BytesIO(response.content), f)
             
+def compute_jaccard(A, B):
+        intersection = len(A & B)  # @inspect intersection
+        union = len(A | B)  # @inspect union
+        return intersection / union
+    
+def minhash(S: set[str], seed: int):
+    return min(mmh3.hash(x, seed) for x in S)
+
+def get_prob_collision(sim, b, r):  # @inspect sim, @inspect b, @inspect r
+    prob_match = sim ** r                        # Probability that a fixed band matches  @inspect prob_match
+    prob_collision = 1 - (1 - prob_match) ** b   # Probability that some band matches  @inspect prob_collision
+    
+    return prob_collision

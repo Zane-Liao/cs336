@@ -156,23 +156,7 @@ def query_table_k(table: bitarray, item: str, num_bins: int, k: int):
         query_table(table, item, num_bins, seed)
         for seed in range(k)
     ))
-    
-    
-def compute_jaccard(A, B):
-        intersection = len(A & B)  # @inspect intersection
-        union = len(A | B)  # @inspect union
-        return intersection / union
-    
-    
-def minhash(S: set[str], seed: int):
-    return min(mmh3.hash(x, seed) for x in S)
 
-
-def get_prob_collision(sim, b, r):  # @inspect sim, @inspect b, @inspect r
-    prob_match = sim ** r                        # Probability that a fixed band matches  @inspect prob_match
-    prob_collision = 1 - (1 - prob_match) ** b   # Probability that some band matches  @inspect prob_collision
-    
-    return prob_collision
 
 ##################################################################################################
 ##################################################################################################
