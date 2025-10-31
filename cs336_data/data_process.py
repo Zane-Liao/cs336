@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from nltk import word_tokenize
 from dataclasses import dataclass
+from itertools import combinations
 from collections import Counter, defaultdict
 from resiliparse.extract.html2text import extract_plain_text
 from resiliparse.parse.encoding import detect_encoding
@@ -279,8 +280,106 @@ def minhash_lsh_deduplication(
             Implement the adapter [run_minhash_deduplication] and make sure it passes
             uv run pytest -k test_minhash_deduplication
     """
-    raise NotImplementedError
+    os.makedirs(output_directory, exist_ok=True)
+    
+    docs = []
+    for path in input_files:
+        with open(path, "r", encoding='utf-8') as f:
+            content = f.read()
+            norm_text = normalize_text(content)
+            ngrams_set = get_ngrams(norm_text, ngrams)
+            signature = compute_minhash(ngrams_set, num_hashes)
+            docs.append({
+                "path": path,
+                "content": content,
+                "norm": norm_text,
+                "ngrams": ngrams_set,
+                "sig": signature,
+                })
+    
+    # Detect duplicate text
+    unique_docs = []
+    seen_texts = set()
+    for doc in docs:
+        if doc["content"] not in seen_texts:
+            unique_docs.append(doc)
+            seen_texts.add(doc["content"])
+    
+    # LSH bucketing
+    band_buckets = defaultdict(list)
+    for idx, doc in enumerate(unique_docs):
+        for band_hash in lsh_buckets(doc["sig"], num_bands):
+            band_buckets[band_hash].append(idx)
+            
+    # Identify fuzzy duplicates
+    to_remove = set()
+    for bucket_docs in band_buckets.values():
+        for i, j in combinations(bucket_docs, 2):
+            if i in to_remove or j in to_remove:
+                continue
+            
+            sim = compute_jaccard(unique_docs[i]["ngrams"], unique_docs[j]["ngrams"])
+            if sim >= jaccard_threshold:
+                to_remove.add(j)
+                
+    kept = [doc for i, doc in enumerate(unique_docs) if i not in to_remove]
+    
+    # Write deduplicated docs
+    for doc in kept:
+        name = os.path.basename(doc["path"])
+        output_path = os.path.join(output_directory, name)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(doc["content"])
 
+
+def normalize_text(text: str) -> str:
+    """
+        Normalize whitespace and lowercase text
+        
+        Regex Simple Example:
+            >>> text = "hello   world\tthis is\npython"
+            >>> re.split(r"\\s+", text)
+            ['hello', 'world', 'this', 'is', 'python']
+    """
+    text = text.replace("\r\n", "\n").lower()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+def get_ngrams(text: str, n: int) -> set[str]:
+    """
+        Split text into n-grams
+        
+        Example:
+            >>> text = "abcd"
+            >>> n = 2
+            >>> result = {text[i:i + n] for i in range(max(0, len(text) - n + 1))}
+            >>> result
+            {'ab', 'bc', 'cd'}
+    """
+    return { text[i:i+n] for i in range(max(0, len(text) - n + 1)) }
+
+def compute_minhash(ngrams: set[str], num_hashes: int) -> list[int]:
+    """Compute MinHash"""
+    signature = []
+    for seed in range(num_hashes):
+        min_hash = min(mmh3.hash(gram, seed, signed=False) for gram in ngrams)
+        signature.append(min_hash)
+
+    return signature
+
+def lsh_buckets(signature: set[int], num_bands: int) -> list[int]:
+    """Divide signature into bands and compute hash for each band"""
+    rows_band = len(signature) // num_bands
+    buckets = []
+    for i in range(num_bands):
+        start = 1 * rows_band
+        end = (i + 1) * rows_band
+        # ...
+        band_hash = hash(tuple(signature[start:end]))
+        buckets.append(band_hash)
+    
+    return buckets
+    
 ##################################################################################################
 ##################################################################################################
 
@@ -299,12 +398,3 @@ def compute_jaccard(A, B):
         intersection = len(A & B)  # @inspect intersection
         union = len(A | B)  # @inspect union
         return intersection / union
-    
-def minhash(S: set[str], seed: int):
-    return min(mmh3.hash(x, seed) for x in S)
-
-def get_prob_collision(sim, b, r):  # @inspect sim, @inspect b, @inspect r
-    prob_match = sim ** r                        # Probability that a fixed band matches  @inspect prob_match
-    prob_collision = 1 - (1 - prob_match) ** b   # Probability that some band matches  @inspect prob_collision
-    
-    return prob_collision
