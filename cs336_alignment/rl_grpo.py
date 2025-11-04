@@ -7,6 +7,17 @@ import torch
 import torch.nn as nn
 import wandb
 
+__all__ = [
+    "compute_group_normalized_rewards",
+    "compute_naive_policy_gradient_loss",
+    "compute_grpo_clip_loss",
+    "compute_policy_gradient_loss",
+    "masked_mean",
+    "grpo_microbatch_train_step",
+    "grpo_train_loop",
+    "grpo_off_policy",
+    "grpo_off_policy_clip_ablation",
+]
 
 def compute_group_normalized_rewards(
     reward_fn,

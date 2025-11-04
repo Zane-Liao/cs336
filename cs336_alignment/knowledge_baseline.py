@@ -5,6 +5,11 @@ import torch
 import torch.nn as nn
 import wandb
 
+__all__ = [
+    "mmlu_baseline",
+    "gsm8k_baseline",
+    "alpaca_eval_baseline",
+]
 
 def mmlu_baseline():
     """

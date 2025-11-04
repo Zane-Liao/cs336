@@ -3,14 +3,23 @@ Supervised Fine-tuning
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
+__all__ = [
+    "tokenize_prompt_and_output",
+    "compute_entropy",
+    "get_response_log_probs",
+    "masked_normalize",
+    "sft_microbatch_train_step",
+    "log_generations",
+]
 
 def tokenize_prompt_and_output(
     prompt_strs: list[str],
     output_strs: list[str],
     tokenizer: PreTrainedTokenizer
-):
+) -> dict[str, torch.Tensor]:
     """
     prompt and output strings, and construct a mask that is 1 for the response tokens and 0 for
     other tokens (prompt or padding).
@@ -22,13 +31,14 @@ def tokenize_prompt_and_output(
 
     Returns:
         dict[str, torch.Tensor]. Let prompt_and_output_lens be a list containing the lengths of
-        the tokenized prompt and output strings. Then the returned dictionary should have the
+        the tokenized prompt and output strings. Then the returned dictionary should have the following keys:
 
-    following keys:
         input_ids torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1):
         the tokenized prompt and output strings, with the final token sliced off.
+
         labels torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1):
         shifted input ids, i.e., the input ids without the first token.
+
         response_mask torch.Tensor of shape (batch_size, max(prompt_and_output_lens) -
         1): a mask on the response tokens in the labels.
     
@@ -36,7 +46,45 @@ def tokenize_prompt_and_output(
         implement [adapters.run_tokenize_prompt_and_output]
         uv run pytest -k test_tokenize_prompt_and_output
     """
-    raise NotImplementedError
+    assert len(prompt_strs) == len(output_strs), "Must same!!!"
+    
+    batch_input_ids = [] 
+    batch_response_masks = []
+    
+    for prompt, output in zip(prompt_strs, output_strs):
+        prompt_tokens = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+        output_tokens = tokenizer(output, add_special_tokens=False)["input_ids"]
+        
+        full_tokens = prompt_tokens + output_tokens
+        
+        response_mask = [0] * len(prompt_tokens) + [1] * len(output_tokens)
+        
+        batch_input_ids.append(full_tokens)
+        batch_response_masks.append(response_mask)
+        
+    max_len = max(len(x) for x in batch_input_ids)
+    pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+    
+    input_ids_paded = []
+    response_mask_paded = []
+    for input_ids, mask in zip(batch_input_ids, batch_response_masks):
+        pad_len = max_len - len(input_ids)
+        input_ids_paded.append(input_ids + [pad_id] * pad_len)
+        response_mask_paded.append(mask + [0] * pad_len)
+    
+    input_ids = torch.tensor(input_ids_paded, dtype=torch.float32)
+    response_mask = torch.tensor(response_mask_paded, dtype=torch.float32)
+    
+    labels = input_ids.clone()
+    input_ids = input_ids[:, :-1]
+    labels = labels[:, 1:]
+    response_mask = response_mask[:, 1:]
+    
+    return {
+        "input_ids": input_ids,
+        "labels": labels,
+        "response_mask": response_mask,
+        }
 
 
 def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
@@ -55,7 +103,8 @@ def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
         implement [adapters.run_compute_entropy]
         uv run pytest -k test_compute_entropy
     """
-    raise NotImplementedError
+    probs = F.softmax(logits, dim=-1)
+    return -torch.sum(probs * torch.log(probs), dim=-1)
 
 
 def get_response_log_probs(
@@ -90,7 +139,7 @@ def get_response_log_probs(
         implement [adapters.run_get_response_log_probs]
         uv run pytest -k test_get_response_log_probs
     """
-    raise NotImplementedError
+    
 
 
 def masked_normalize(

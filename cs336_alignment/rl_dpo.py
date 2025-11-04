@@ -7,6 +7,11 @@ import torch
 import torch.nn as nn
 import wandb
 
+__all__= [
+    "look_at_hh",
+    "dpo_loss",
+    "dpo_training",
+]
 
 def look_at_hh():
     raise NotImplementedError
