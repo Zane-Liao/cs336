@@ -94,7 +94,7 @@ def run_get_response_log_probs(
     input_ids: torch.Tensor,
     labels: torch.Tensor,
     return_token_entropy: bool,
-):
+) -> torch.Tensor:
     """Get the conditional log-probs of the response given the prompt,
         and optionally the entropy of the next token predictions.
 

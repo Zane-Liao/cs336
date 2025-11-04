@@ -139,7 +139,20 @@ def get_response_log_probs(
         implement [adapters.run_get_response_log_probs]
         uv run pytest -k test_get_response_log_probs
     """
+    # (batch, seq_len) -> (batch, seq_len, 1) -> gather(unsqueeze) -> (batch, seq_len, 1) -> squeeze -> (batch, seq_len)
+    outputs = model(input_ids)
+    logits = outputs.logits
     
+    log_probs = F.log_softmax(logits, dim=-1)
+    
+    token_log_probs = log_probs.gather(dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
+    
+    result = {"log_probs": token_log_probs}
+
+    if return_token_entropy:
+        result["token_entropy"] = compute_entropy(logits)
+
+    return result
 
 
 def masked_normalize(
