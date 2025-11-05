@@ -12,6 +12,8 @@ from vllm.model_executor import set_random_seed as vllm_set_random_seed
 import wandb
 from datasets import load_dataset
 
+from sft_method import *
+
 __all__ = [
     "evaluate_vllm",
     "init_vllm",
@@ -127,30 +129,46 @@ def load_policy_into_vllm_instance(policy: PreTrainedModel, llm: LLM):
 # # everything that starts with eval/ is tied to eval_step
 # wandb.define_metric("eval/*", step_metric="eval_step")
 
+
+def sft():
+    raise NotImplementedError
+
+def expert_iteration():
+    # sampling_min_tokens = 4
+    # sampling_params = SamplingParams(
+    #     temperature=sampling_temperature,
+    #     max_tokens=sampling_max_tokens,
+    #     min_tokens=sampling_min_tokens,
+    #     n=G,
+    #     seed=seed,
+    # )
+    raise NotImplementedError
+
 # --------------------------------------------------------------------------------------------
 
-# # 1. Load the dataset
-# ds = load_dataset("hkust-nlp/dart-math-uniform")
-# print("Dataset loaded.")
-# print("Example data point:", ds["train"][0])
+def evaluate_vllm_main():
+    # 1. Load the dataset
+    ds = load_dataset("hkust-nlp/dart-math-uniform")
+    print("Dataset loaded.")
+    print("Example data point:", ds["train"][0])
 
-# # 2. Initialize the VLLM model
-# # Make sure you have enough VRAM for this model
-# print("Loading VLLM model...")
-# llm_model = LLM("Qwen/Qwen2.5-Math-1.5B", tensor_parallel_size=1)
-# print("Model loaded.")
+    # 2. Initialize the VLLM model
+    # Make sure you have enough VRAM for this model
+    print("Loading VLLM model...")
+    llm_model = LLM("Qwen/Qwen2.5-Math-1.5B", tensor_parallel_size=1)
+    print("Model loaded.")
 
-# # 3. Define sampling parameters
-# sampling = SamplingParams(max_tokens=1024, temperature=1.0, top_p=1.0) # Set temperature to 0 for more deterministic output
+    # 3. Define sampling parameters
+    sampling = SamplingParams(max_tokens=1024, temperature=1.0, top_p=1.0) # Set temperature to 0 for more deterministic output
 
-# # 4. Define the reward function for evaluation
-# def reward_fn(pred: str, ref: str) -> dict[str, float]:
-#     """Calculates exact match between prediction and reference."""
-#     return {"exact_match": float(pred.strip() == ref.strip())}
+    # 4. Define the reward function for evaluation
+    def reward_fn(pred: str, ref: str) -> dict[str, float]:
+        """Calculates exact match between prediction and reference."""
+        return {"exact_match": float(pred.strip() == ref.strip())}
 
-# # 5. Prepare prompts and references from the dataset
-# prompts = [item["query"] for item in ds["train"]]
-# references = [item["response"] for item in ds["train"]]
+    # 5. Prepare prompts and references from the dataset
+    prompts = [item["query"] for item in ds["train"]]
+    references = [item["response"] for item in ds["train"]]
 
-# # 6. Run the evaluation
-# evaluate_vllm(llm_model, reward_fn, prompts, sampling, references=references)
+    # 6. Run the evaluation
+    evaluate_vllm(llm_model, reward_fn, prompts, sampling, references=references)
