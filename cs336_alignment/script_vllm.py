@@ -2,15 +2,16 @@
 vLLM script
 """
 import json
-from typing import Callable, List
+from typing import Any, Callable, List
 import torch
 import torch.nn as nn
 from unittest.mock import patch
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.model_executor import set_random_seed as vllm_set_random_seed
 import wandb
 from datasets import load_dataset
+from typing import Callable, Optional
 
 from sft_method import *
 
@@ -131,7 +132,42 @@ def load_policy_into_vllm_instance(policy: PreTrainedModel, llm: LLM):
 
 
 def sft():
-    raise NotImplementedError
+    model_name = "Qwen/Qwen2.5-Math-1.5B"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    
+    ds = load_dataset("hkust-nlp/dart-math-uniform")
+    
+    prompts = [item["query"] for item in ds["train"]]
+    response = [item["response"] for item in ds["train"]]
+    
+    generation_kwargs = {
+        "max_new_tokens": 10,
+        "do_sample": False,
+        "pad_token_id": tokenizer.pad_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+    }
+    
+    log_generations(
+        model=model,
+        tokenizer=tokenizer,
+        prompts=prompts,
+        ground_truth_responses=response,
+        reward_fn=simple_reward_fn,
+        device=device,
+        generation_kwargs=generation_kwargs,
+    )
+    
+    # print("----")
+    # with open(output_file, "w", encoding="utf-8") as f:
+    #     json.dump(results, f, ensure_ascii=False, indent=2)
+    
 
 def expert_iteration():
     # sampling_min_tokens = 4
@@ -172,3 +208,128 @@ def evaluate_vllm_main():
 
     # 6. Run the evaluation
     evaluate_vllm(llm_model, reward_fn, prompts, sampling, references=references)
+    
+    
+def log_generations(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
+    prompts: list[str],
+    ground_truth_responses: list[str],
+    reward_fn: Callable,
+    device: torch.device,
+    generation_kwargs: Optional[dict] = None,
+):
+    if generation_kwargs is None:
+        generation_kwargs = {
+            "max_tokens": 1,
+            "do_sample": False,
+            "pad_token_id": tokenizer.pad_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+    
+    model.eval()
+    all_logs = []
+    
+    total_response_len = 0
+    total_correct_len = 0
+    total_incorrect_len = 0
+    total_correct_count = 0
+    total_incorrect_count = 0
+    total_reward = 0.0
+    total_entropy = 0.0
+    
+    with torch.no_grad():
+        for i in range(len(prompts)):
+            prompt = prompts[i]
+            ground_truth = ground_truth_responses[i]
+            
+            log_entry = {
+                "prompt": prompt,
+                "ground_truth_response": ground_truth,
+            }
+
+            # 1. Generated Response
+            inputs = tokenizer(prompt, return_tensors="pt").to(device)
+            input_len = inputs.input_ids.shape[1]
+            
+            outputs = model.generate(**inputs, **generation_kwargs)
+            
+            generated_ids = outputs[0, input_len:]
+            generated_response = tokenizer.decode(generated_ids, skip_special_tokens=True)
+            log_entry["generated_response"] = generated_response
+
+            # 2. Reward Information
+            reward_info = reward_fn(prompt, generated_response, ground_truth)
+            log_entry["reward_info"] = reward_info
+            
+            is_correct = reward_info.get("answer_reward", 0.0) == 1.0
+            total_reward += reward_info.get("total_reward", 0.0)
+
+            # 3. Average Token Entropy
+            tokenized = tokenize_prompt_and_output([prompt], [generated_response], tokenizer)
+            
+            t_input_ids = tokenized["input_ids"].to(device)
+            t_labels = tokenized["labels"].to(device)
+            t_response_mask = tokenized["response_mask"].to(device)
+
+            log_probs_data = get_response_log_probs(
+                model, t_input_ids, t_labels, return_token_entropy=True
+            )
+            
+            token_entropy = log_probs_data["token_entropy"] # (batch_size, seq_len)
+            
+            # Compute Response Token Entropy
+            num_response_tokens = t_response_mask.sum()
+            if num_response_tokens > 0:
+                avg_entropy = (token_entropy * t_response_mask).sum() / num_response_tokens
+            else:
+                avg_entropy = 0.0
+                
+            log_entry["avg_token_entropy"] = avg_entropy.item()
+            total_entropy += avg_entropy.item()
+
+            # 4. Aggregate Statistics
+            response_len = len(generated_ids)
+            total_response_len += response_len
+            
+            if is_correct:
+                total_correct_len += response_len
+                total_correct_count += 1
+            else:
+                total_incorrect_len += response_len
+                total_incorrect_count += 1
+                
+            all_logs.append(log_entry)
+
+
+    num_examples = len(prompts)
+    aggregate_stats = {
+        "avg_response_length": (total_response_len / num_examples) if num_examples > 0 else 0,
+        "avg_correct_length": (total_correct_len / total_correct_count) if total_correct_count > 0 else 0,
+        "avg_incorrect_length": (total_incorrect_len / total_incorrect_count) if total_incorrect_count > 0 else 0,
+        "avg_reward": (total_reward / num_examples) if num_examples > 0 else 0,
+        "avg_entropy": (total_entropy / num_examples) if num_examples > 0 else 0,
+        "accuracy": (total_correct_count / num_examples) if num_examples > 0 else 0,
+    }
+
+    return {
+        "per_example_logs": all_logs,
+        "aggregate_stats": aggregate_stats
+    }
+    
+def simple_reward_fn(
+    prompt: str, 
+    generated_response: str, 
+    ground_truth: str
+) -> dict[str, Any]:
+    format_reward = 1.0 if generated_response.strip().startswith("Answer:") else 0.0
+    
+    answer_reward = 1.0 if generated_response.strip() == ground_truth.strip() else 0.0
+    
+    total_reward = format_reward + answer_reward
+    
+    return {
+        "format_reward": format_reward,
+        "answer_reward": answer_reward,
+        "total_reward": total_reward,
+    }

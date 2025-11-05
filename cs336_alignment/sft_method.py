@@ -12,7 +12,6 @@ __all__ = [
     "get_response_log_probs",
     "masked_normalize",
     "sft_microbatch_train_step",
-    "log_generations",
 ]
 
 def tokenize_prompt_and_output(
@@ -234,7 +233,3 @@ def sft_microbatch_train_step(
     }
     
     return (scale_loss.detach(), metadata)
-
-
-def log_generations():
-    raise NotImplementedError
