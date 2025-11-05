@@ -158,8 +158,8 @@ def get_response_log_probs(
 def masked_normalize(
     tensor: torch.Tensor,
     mask: torch.Tensor,
-    normalize_constant: float,
-    dim: int | None= None,
+    dim: int | None = None,
+    normalize_constant: float = 1.0,
 ) -> torch.Tensor:
     """
     Sum over a dimension and normalize by a constant, considering only those elements where mask == 1.
@@ -179,7 +179,11 @@ def masked_normalize(
         implement [adapters.run_masked_normalize]
         uv run pytest -k test_masked_normalize
     """
-    raise NotImplementedError
+    t_masked = tensor * mask
+    
+    summed = t_masked.sum() if dim is None else t_masked.sum(dim=dim)
+    
+    return summed / normalize_constant
 
 
 def sft_microbatch_train_step(
@@ -201,16 +205,35 @@ def sft_microbatch_train_step(
 
     Returns:
         tuple[torch.Tensor, dict[str, torch.Tensor]].
-        loss scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return
+        **loss** scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return
         this so we can log it.
-        metadata Dict with metadata from the underlying loss call, and any other statistics you
+        **metadata** Dict with metadata from the underlying loss call, and any other statistics you
         might want to log.
         
     Test:
         implement [adapters.run_sft_microbatch_train_step]
         uv run pytest -k test_sft_microbatch_train_step
     """
-    raise NotImplementedError
+    loss = masked_normalize(
+        tensor=-policy_log_probs,
+        mask=response_mask,
+        dim=None,
+        normalize_constant=normalize_constant
+    )
+    
+    batch_size = policy_log_probs.shape[0]
+    
+    sft_avg_loss = loss / batch_size if batch_size > 0 else loss
+    
+    scale_loss = sft_avg_loss / gradient_accumulation_steps
+    
+    scale_loss.backward()
+    
+    metadata = {
+        "sft_loss" : scale_loss.detach()
+    }
+    
+    return (scale_loss.detach(), metadata)
 
 
 def log_generations():
