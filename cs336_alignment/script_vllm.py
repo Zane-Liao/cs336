@@ -1,18 +1,19 @@
 """
-vLLM script
+vLLM SFT script
 """
 import os
 import json
-from typing import Any, Callable, List
+import wandb
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 from unittest.mock import patch
-from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
+from collections import Counter
+from datasets import load_dataset
+from typing import Any, Callable, Dict, Callable, Optional
 from vllm import LLM, SamplingParams
 from vllm.model_executor import set_random_seed as vllm_set_random_seed
-import wandb
-from datasets import load_dataset
-from typing import Callable, Optional
+from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 
 from sft_method import *
 
@@ -134,29 +135,33 @@ def load_policy_into_vllm_instance(policy: PreTrainedModel, llm: LLM):
 
 def sft():
     model_name = "Qwen/Qwen2.5-Math-1.5B"
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto",
-        )
-    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    
-    model.conifg.pad_token_id = tokenizer.pad_token_id
     tokenizer.padding_side = "left"
-        
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    
-    ds = load_dataset("hkust-nlp/dart-math-uniform")
-    
-    prompts = ds["train"]["query"]
-    response = ds["train"]["response"]
 
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto",
+    )
+    model.config.pad_token_id = tokenizer.pad_token_id
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    ds = load_dataset("hkust-nlp/dart-math-uniform")
+
+    num_samples = 200
+    ds_sample = ds["train"].shuffle(seed=42).select(range(num_samples))
+
+    # openai/gsm8k -> "question" "answer"
+    # 
+    prompts = ds_sample["query"]
+    responses = ds_sample["response"]
+    
     generation_kwargs = {
-        "max_new_tokens": 10,
+        "max_new_tokens": 256,
         "do_sample": False,
         "pad_token_id": tokenizer.pad_token_id,
         "eos_token_id": tokenizer.eos_token_id,
@@ -166,7 +171,7 @@ def sft():
         model=model,
         tokenizer=tokenizer,
         prompts=prompts,
-        ground_truth_responses=response,
+        ground_truth_responses=responses,
         reward_fn=simple_reward_fn,
         device=device,
         generation_kwargs=generation_kwargs,
@@ -175,6 +180,8 @@ def sft():
     os.makedirs("outputs", exist_ok=True)
     with open("outputs/sft_result.json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
+
+    print("SFT logging complete. Results saved to outputs/sft_result.json")
     
 
 def expert_iteration():
@@ -216,8 +223,7 @@ def evaluate_vllm_main():
 
     # 6. Run the evaluation
     evaluate_vllm(llm_model, reward_fn, prompts, sampling, references=references)
-    
-    
+
 def log_generations(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
@@ -226,10 +232,11 @@ def log_generations(
     reward_fn: Callable,
     device: torch.device,
     generation_kwargs: Optional[dict] = None,
+    batch_size: int = 8
 ):
     if generation_kwargs is None:
         generation_kwargs = {
-            "max_tokens": 1,
+            "max_new_tokens": 256, 
             "do_sample": False,
             "pad_token_id": tokenizer.pad_token_id,
             "eos_token_id": tokenizer.eos_token_id,
@@ -245,71 +252,104 @@ def log_generations(
     total_incorrect_count = 0
     total_reward = 0.0
     total_entropy = 0.0
+
+    original_padding_side = tokenizer.padding_side
     
     with torch.no_grad():
-        for i in range(len(prompts)):
-            prompt = prompts[i]
-            ground_truth = ground_truth_responses[i]
-            
-            log_entry = {
-                "prompt": prompt,
-                "ground_truth_response": ground_truth,
-            }
+        for i in tqdm(range(0, len(prompts), batch_size), desc="Logging Generations"):
+            batch_prompts = prompts[i : i + batch_size]
+            batch_ground_truth = ground_truth_responses[i : i + batch_size]
 
-            # 1. Generated Response
-            inputs = tokenizer(prompt, return_tensors="pt").to(device)
+            tokenizer.padding_side = "left"
+            inputs = tokenizer(
+                batch_prompts, 
+                return_tensors="pt", 
+                padding=True, 
+                truncation=True
+            ).to(device)
+
+            inputs['input_ids'] = inputs['input_ids'].long()
+            if 'attention_mask' in inputs:
+                inputs['attention_mask'] = inputs['attention_mask'].long()
+
             input_len = inputs.input_ids.shape[1]
-            
+
             outputs = model.generate(**inputs, **generation_kwargs)
-            
-            generated_ids = outputs[0, input_len:]
-            generated_response = tokenizer.decode(generated_ids, skip_special_tokens=True)
-            log_entry["generated_response"] = generated_response
 
-            # 2. Reward Information
-            reward_info = reward_fn(prompt, generated_response, ground_truth)
-            log_entry["reward_info"] = reward_info
+            generated_ids_batch = outputs[:, input_len:]
             
-            is_correct = reward_info.get("answer_reward", 0.0) == 1.0
-            total_reward += reward_info.get("total_reward", 0.0)
+            generated_responses = tokenizer.batch_decode(
+                generated_ids_batch, skip_special_tokens=True
+            )
 
-            # 3. Average Token Entropy
-            tokenized = tokenize_prompt_and_output([prompt], [generated_response], tokenizer)
+            batch_rewards = []
+            batch_is_correct = []
+            for j in range(len(batch_prompts)):
+                reward_info = reward_fn(
+                    batch_prompts[j], 
+                    generated_responses[j], 
+                    batch_ground_truth[j]
+                )
+                batch_rewards.append(reward_info)
+                
+                is_correct = reward_info.get("answer_reward", 0.0) == 1.0
+                batch_is_correct.append(is_correct)
+                
+                total_reward += reward_info.get("total_reward", 0.0)
+
+            tokenizer.padding_side = "right"
+
+            tokenized = tokenize_prompt_and_output(
+                batch_prompts, generated_responses, tokenizer
+            )
             
-            t_input_ids = tokenized["input_ids"].to(device)
-            t_labels = tokenized["labels"].to(device)
-            t_response_mask = tokenized["response_mask"].to(device)
+            t_input_ids = tokenized["input_ids"].long().to(device)
+            t_labels = tokenized["labels"].long().to(device)
+            t_response_mask = tokenized["response_mask"].long().to(device)
 
             log_probs_data = get_response_log_probs(
                 model, t_input_ids, t_labels, return_token_entropy=True
             )
             
-            token_entropy = log_probs_data["token_entropy"] # (batch_size, seq_len)
+            token_entropy_batch = log_probs_data["token_entropy"] # [batch_size, seq_len]
+
+            token_entropy_batch = torch.nan_to_num(token_entropy_batch, nan=0.0)
             
-            # Compute Response Token Entropy
-            num_response_tokens = t_response_mask.sum()
-            if num_response_tokens > 0:
-                avg_entropy = (token_entropy * t_response_mask).sum() / num_response_tokens
-            else:
-                avg_entropy = 0.0
-                
-            log_entry["avg_token_entropy"] = avg_entropy.item()
-            total_entropy += avg_entropy.item()
-
-            # 4. Aggregate Statistics
-            response_len = len(generated_ids)
-            total_response_len += response_len
+            num_response_tokens_batch = t_response_mask.sum(dim=1) # [batch_size,]
+            sum_entropy_batch = (token_entropy_batch * t_response_mask).sum(dim=1) # [batch_size,]
             
-            if is_correct:
-                total_correct_len += response_len
-                total_correct_count += 1
-            else:
-                total_incorrect_len += response_len
-                total_incorrect_count += 1
+            safe_num_tokens = num_response_tokens_batch.clamp(min=1.0)
+            avg_entropy_batch = sum_entropy_batch / safe_num_tokens
+            avg_entropy_batch[num_response_tokens_batch == 0] = 0.0
+            
+            avg_entropy_list = avg_entropy_batch.cpu().tolist()
+            total_entropy += avg_entropy_batch.sum().item()
+            
+            response_lens_tensor = (generated_ids_batch != tokenizer.pad_token_id).sum(dim=1)
+            response_lens = response_lens_tensor.cpu().tolist()
+            
+            total_response_len += response_lens_tensor.sum().item()
+
+            for j in range(len(batch_prompts)):
+                log_entry = {
+                    "prompt": batch_prompts[j],
+                    "ground_truth_response": batch_ground_truth[j],
+                    "generated_response": generated_responses[j],
+                    "reward_info": batch_rewards[j],
+                    "avg_token_entropy": avg_entropy_list[j],
+                }
+                all_logs.append(log_entry)
                 
-            all_logs.append(log_entry)
-
-
+                response_len = response_lens[j]
+                if batch_is_correct[j]:
+                    total_correct_len += response_len
+                    total_correct_count += 1
+                else:
+                    total_incorrect_len += response_len
+                    total_incorrect_count += 1
+    
+    tokenizer.padding_side = original_padding_side
+    
     num_examples = len(prompts)
     aggregate_stats = {
         "avg_response_length": (total_response_len / num_examples) if num_examples > 0 else 0,
@@ -324,20 +364,33 @@ def log_generations(
         "per_example_logs": all_logs,
         "aggregate_stats": aggregate_stats
     }
-    
-def simple_reward_fn(
-    prompt: str, 
-    generated_response: str, 
-    ground_truth: str
-) -> dict[str, Any]:
-    format_reward = 1.0 if generated_response.strip().startswith("Answer:") else 0.0
-    
-    answer_reward = 1.0 if generated_response.strip() == ground_truth.strip() else 0.0
-    
+
+
+def simple_reward_fn(prompt: str, generated_response: str, ground_truth: str) -> Dict[str, Any]:
+    gen = generated_response.strip().lower()
+    gt = ground_truth.strip().lower()
+
+    if gen.startswith("answer:"):
+        format_reward = 1.0
+    else:
+        format_reward = 0.5
+
+    gen_tokens = gen.split()
+    gt_tokens = gt.split()
+    if len(gt_tokens) == 0:
+        answer_reward = 0.0
+    else:
+        common_tokens = sum((Counter(gt_tokens) & Counter(gen_tokens)).values())
+        answer_reward = common_tokens / max(len(gt_tokens), 1)
+
     total_reward = format_reward + answer_reward
-    
+
     return {
         "format_reward": format_reward,
         "answer_reward": answer_reward,
         "total_reward": total_reward,
     }
+    
+    
+if __name__ == "__main__":
+    sft()
