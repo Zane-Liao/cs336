@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Literal
 import torch
 import torch.nn as nn
+from transformers import PreTrainedTokenizerBase
 import wandb
 
 __all__= [
@@ -17,7 +18,15 @@ def look_at_hh():
     raise NotImplementedError
 
 
-def dpo_loss():
+def dpo_loss(
+    lm: torch.nn.Module,
+    lm_ref: torch.nn.Module,
+    tokenizer: PreTrainedTokenizerBase,
+    beta: float,
+    prompt: str,
+    response_chosen: str,
+    response_rejected: str,
+) -> torch.Tensor:
     """
     Test:
         Implement the adapter [adapters.per_instance_dpo]

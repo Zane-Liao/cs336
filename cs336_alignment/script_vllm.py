@@ -1,6 +1,7 @@
 """
 vLLM script
 """
+import os
 import json
 from typing import Any, Callable, List
 import torch
@@ -134,19 +135,26 @@ def load_policy_into_vllm_instance(policy: PreTrainedModel, llm: LLM):
 def sft():
     model_name = "Qwen/Qwen2.5-Math-1.5B"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto",
+        )
     
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    
+    model.conifg.pad_token_id = tokenizer.pad_token_id
+    tokenizer.padding_side = "left"
         
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     
     ds = load_dataset("hkust-nlp/dart-math-uniform")
     
-    prompts = [item["query"] for item in ds["train"]]
-    response = [item["response"] for item in ds["train"]]
-    
+    prompts = ds["train"]["query"]
+    response = ds["train"]["response"]
+
     generation_kwargs = {
         "max_new_tokens": 10,
         "do_sample": False,
@@ -154,7 +162,7 @@ def sft():
         "eos_token_id": tokenizer.eos_token_id,
     }
     
-    log_generations(
+    results = log_generations(
         model=model,
         tokenizer=tokenizer,
         prompts=prompts,
@@ -164,9 +172,9 @@ def sft():
         generation_kwargs=generation_kwargs,
     )
     
-    # print("----")
-    # with open(output_file, "w", encoding="utf-8") as f:
-    #     json.dump(results, f, ensure_ascii=False, indent=2)
+    os.makedirs("outputs", exist_ok=True)
+    with open("outputs/sft_result.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
     
 
 def expert_iteration():
