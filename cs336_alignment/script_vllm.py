@@ -1,6 +1,7 @@
 """
 vLLM SFT script
 """
+from dataclasses import dataclass
 import os
 import json
 import wandb
@@ -10,18 +11,13 @@ from tqdm import tqdm
 from unittest.mock import patch
 from collections import Counter
 from datasets import load_dataset
-from typing import Any, Callable, Dict, Callable, Optional
+from typing import Any, Callable, Dict, Callable, Literal, Optional
 from vllm import LLM, SamplingParams
 from vllm.model_executor import set_random_seed as vllm_set_random_seed
 from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 
 from sft_method import *
-
-__all__ = [
-    "evaluate_vllm",
-    "init_vllm",
-    "load_policy_into_vllm_instance",
-]
+from rl_grpo import *
 
 def evaluate_vllm(
     vllm_model: LLM,
@@ -121,17 +117,8 @@ def load_policy_into_vllm_instance(policy: PreTrainedModel, llm: LLM):
 
     llm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
     llm_model.load_weights(state_dict.items())
-    
 
-# # Setup wandb metrics
-# wandb.define_metric("train_step")
-# wandb.define_metric("eval_step") # the x‑axis for training
-# # the x‑axis for evaluation
-# # everything that starts with train/ is tied to train_step
-# wandb.define_metric("train/*", step_metric="train_step")
-# # everything that starts with eval/ is tied to eval_step
-# wandb.define_metric("eval/*", step_metric="eval_step")
-
+# --------------------------------------------------------------------------------------------
 
 def sft():
     model_name = "Qwen/Qwen2.5-Math-1.5B"
@@ -182,7 +169,8 @@ def sft():
         json.dump(results, f, ensure_ascii=False, indent=2)
 
     print("SFT logging complete. Results saved to outputs/sft_result.json")
-    
+
+# --------------------------------------------------------------------------------------------
 
 def expert_iteration():
     # sampling_min_tokens = 4
@@ -197,7 +185,7 @@ def expert_iteration():
 
 # --------------------------------------------------------------------------------------------
 
-def evaluate_vllm_main():
+def evaluate_vllm():
     # 1. Load the dataset
     ds = load_dataset("hkust-nlp/dart-math-uniform")
     print("Dataset loaded.")
@@ -391,6 +379,96 @@ def simple_reward_fn(prompt: str, generated_response: str, ground_truth: str) ->
         "total_reward": total_reward,
     }
     
-    
+# --------------------------------------------------------------------------------------------
+
+@dataclass
+class GRPOConfig:
+    n_grpo_steps: int = 200
+    learning_rate: float = 1e-5
+    advantage_eps: float = 1e-6
+    rollout_batch_size: int = 256
+    group_size: int = 8
+    sampling_temperature: float = 1.0
+    sampling_min_tokens: int = 4 # As in Expiter, disallow empty string responses
+    sampling_max_tokens: int = 1024
+    epochs_per_rollout_batch: int = 1 # On-policy
+    train_batch_size: int = 256 # On-policy
+    gradient_accumulation_steps: int = 128 # microbatch size is 2, will fit on H100
+    gpu_memory_utilization: float = 0.85
+    loss_type: Literal[
+        "no_baseline",
+        "reinforce_with_baseline",
+        "grpo_clip",
+    ] = "reinforce_with_baseline"
+    use_std_normalization: bool = True
+    optimizer = torch.optim.AdamW(
+        policy.parameters(), # type: ignore
+        lr=learning_rate,
+        weight_decay=0.0,
+        betas=(0.9, 0.95),
+    )
+
+
+def grpo_train_loop(
+    n_grpo_steps: int | None = None,
+    learning_rate: float | None = None,
+    advantage_eps: float | None = None,
+    rollout_batch_size: int | None = None,
+    group_size: int | None = None,
+    sampling_temperature: float | None = None,
+    sampling_min_tokens: int | None = None,
+    sampling_max_tokens: int | None = None,
+    epochs_per_rollout_batch: int | None = None,
+    train_batch_size: int | None = None,
+    gradient_accumulation_steps: int | None = None,
+    gpu_memory_utilization: float | None = None,
+    loss_type: Literal["no_baseline", "reinforce_with_baseline", "grpo_clip"] | None = None,
+    use_std_normalization: bool | None = None,
+    optimizer: torch.optim.AdamW | None = None,
+):
+    assert train_batch_size % gradient_accumulation_steps == 0, (
+        "train_batch_size must be divisible by gradient_accumulation_steps"
+    )
+    micro_train_batch_size = train_batch_size // gradient_accumulation_steps
+    assert rollout_batch_size % group_size == 0, (
+        "rollout_batch_size must be divisible by group_size"
+    )
+    n_prompts_per_rollout_batch = rollout_batch_size // group_size
+    assert train_batch_size >= group_size, (
+        "train_batch_size must be greater than or equal to group_size"
+    )
+    n_microbatches_per_rollout_batch = rollout_batch_size // micro_train_batch_size
+    raise NotImplementedError
+
+
+def grpo_off_policy():
+    raise NotImplementedError
+
+def grpo_off_policy_clip_ablation():
+    raise NotImplementedError
+
+
+def grpo(grpo_type: str | None = None):
+    if grpo_type == "on-policy":
+        raise NotImplementedError
+    elif grpo_type == "off-policy":
+        raise NotImplementedError
+    else:
+        raise ValueError("!!!")
+
+
+# # Setup wandb metrics
+# wandb.define_metric("train_step")
+# wandb.define_metric("eval_step") # the x‑axis for training
+# # the x‑axis for evaluation
+# # everything that starts with train/ is tied to train_step
+# wandb.define_metric("train/*", step_metric="train_step")
+# # everything that starts with eval/ is tied to eval_step
+# wandb.define_metric("eval/*", step_metric="eval_step")
+
+
 if __name__ == "__main__":
-    sft()
+    # evaluate_vllm()
+    # sft()
+    # expert_iteration()
+    grpo(grpo_type="off-policy")
