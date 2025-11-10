@@ -17,7 +17,7 @@ from vllm.model_executor import set_random_seed as vllm_set_random_seed
 from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 
 from sft_method import *
-from rl_grpo import *
+from cs336_alignment.grpo_method import *
 
 def evaluate_vllm(
     vllm_model: LLM,
